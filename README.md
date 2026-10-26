@@ -5,13 +5,20 @@
 
 ## 运行
 
-1. 微信开发者工具 → 导入项目 → 目录选本仓库根目录（`project.config.json` 已指定 `miniprogramRoot: miniprogram/`）
-2. AppID 选「测试号」即可预览
-3. 无 npm 依赖、无需构建
+仓库里是同一套产品的两个端，功能一致：
+
+| 端 | 目录 | 怎么跑 |
+|---|---|---|
+| 微信小程序 | `miniprogram/` | 微信开发者工具 → 导入项目 → 目录选仓库根目录（`project.config.json` 已指定 `miniprogramRoot: miniprogram/`），AppID 选「测试号」即可预览。无 npm 依赖、无需构建 |
+| Android | `android/` | Android Studio（Koala 2024.1.1 或更新）→ Open → 选 `android` 目录 → Sync → Run。JDK 17，最低 Android 8.0（API 26） |
+
+小程序端开发自检：
 
 ```bash
-npm run smoke   # 用 wx 桩在 Node 里跑通页面流程（开发用）
+npm run smoke   # 用 wx 桩在 Node 里跑通页面流程（不进包体）
 ```
+
+> Android 工程没有提交 `gradle-wrapper.jar`（二进制）。首次 Sync 若提示 wrapper 缺失，在 `android/` 目录执行 `gradle wrapper` 生成，或让 Android Studio 自动修复。
 
 ## 页面
 
@@ -77,9 +84,22 @@ miniprogram/
 ├─ app.js / app.json / app.wxss
 ├─ utils/store.js
 └─ pages/records|entry|assess|settings
-tools/smoke.js        页面流程冒烟（wx 桩，不进包体）
+android/
+└─ app/src/main/java/com/kuanbandu/kneerecord/
+   ├─ MainActivity.kt
+   ├─ model/Models.kt          数据类与阶段选项
+   ├─ data/LocalStore.kt       存储层（三个 JSON 文件）
+   ├─ reminder/                每日提醒（AlarmManager + 本地通知）
+   └─ ui/                      四个界面 + 趋势图
+tools/smoke.js        小程序页面流程冒烟（wx 桩，不进包体）
 ```
+
+## Android 版
+
+- Kotlin + Jetpack Compose + Material3，除 AndroidX 外**无第三方依赖**，趋势图用 Compose Canvas 手绘。
+- 数据与小程序端结构完全一致，存在应用私有目录：`knee_records.json` / `knee_assessment.json` / `knee_settings.json`。
+- **每日提醒是真提醒**：本机 AlarmManager + 本地通知，不需要服务端（小程序端做不到，只能"打开时提示"）。Android 13+ 首次开启会请求通知权限；重启手机后需先打开一次应用才会重新排期。
 
 ## 已知限制
 
-- **提醒不是后台推送**：小程序无服务端无法定时推送，当前为「打开小程序时提示」，记录页顶部会出现一行提示。
+- **小程序端提醒不是后台推送**：无服务端无法定时推送，只能是「打开小程序时提示」。Android 端是真实的每日本地通知。
