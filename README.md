@@ -10,7 +10,7 @@
 | 端 | 目录 | 怎么跑 |
 |---|---|---|
 | 微信小程序 | `miniprogram/` | 微信开发者工具 → 导入项目 → 目录选仓库根目录（`project.config.json` 已指定 `miniprogramRoot: miniprogram/`），AppID 选「测试号」即可预览。无 npm 依赖、无需构建 |
-| Android | `android/` | Android Studio（Koala 2024.1.1 或更新）→ Open → 选 `android` 目录 → Sync → Run。JDK 17，最低 Android 8.0（API 26） |
+| Android | `android/` | Android Studio（Koala 2024.1.1 或更新）→ Open → 选 `android` 目录 → Sync → Run。JDK 17，最低 Android 8.0（API 26）。不想装 Studio 就直接从 [Releases](../../releases) 下载 APK |
 
 小程序端开发自检：
 
@@ -99,6 +99,7 @@ tools/smoke.js        小程序页面流程冒烟（wx 桩，不进包体）
 - Kotlin + Jetpack Compose + Material3，除 AndroidX 外**无第三方依赖**，趋势图用 Compose Canvas 手绘。
 - 数据与小程序端结构完全一致，存在应用私有目录：`knee_records.json` / `knee_assessment.json` / `knee_settings.json`。
 - **每日提醒是真提醒**：本机 AlarmManager + 本地通知，不需要服务端（小程序端做不到，只能"打开时提示"）。Android 13+ 首次开启会请求通知权限；重启手机后需先打开一次应用才会重新排期。
+- **云端编译**：每次 push 到 `main`，GitHub Actions（`.github/workflows/android.yml`）自动 `assembleDebug`，产物在 Actions 页面；打过 tag 的版本 APK 挂在 Releases 上。
 
 ## 已知限制
 
