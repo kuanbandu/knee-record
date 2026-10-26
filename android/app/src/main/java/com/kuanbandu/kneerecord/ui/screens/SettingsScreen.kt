@@ -2,7 +2,9 @@ package com.kuanbandu.kneerecord.ui.screens
 
 import android.Manifest
 import android.app.TimePickerDialog
+import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -38,6 +40,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.kuanbandu.kneerecord.data.LocalStore
 import com.kuanbandu.kneerecord.reminder.ReminderScheduler
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** 使用须知原文（本应用不提供任何锻炼建议，此处仅为提示性声明） */
 private val NOTICE_TEXT = "我已知晓运动中如有不适立即停止"
@@ -58,6 +63,8 @@ fun SettingsScreen() {
     var enabled by remember { mutableStateOf(settings.reminderEnabled) }
     var time by remember { mutableStateOf(settings.reminderTime) }
     var showClear by remember { mutableStateOf(false) }
+    var pendingImport by remember { mutableStateOf<String?>(null) }
+    var pendingCount by remember { mutableStateOf(0) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -68,6 +75,66 @@ fun SettingsScreen() {
         } else {
             Toast.makeText(context, "未授予通知权限，提醒不会弹出", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    val exportJsonLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val ok = runCatching { writeToUri(context, uri, LocalStore.exportJson()) }
+        Toast.makeText(
+            context,
+            if (ok.isSuccess) "备份已导出" else "导出失败：${ok.exceptionOrNull()?.message}",
+            Toast.LENGTH_LONG,
+        ).show()
+    }
+
+    val exportCsvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val ok = runCatching { writeToUri(context, uri, LocalStore.exportCsv()) }
+        Toast.makeText(
+            context,
+            if (ok.isSuccess) "表格已导出" else "导出失败：${ok.exceptionOrNull()?.message}",
+            Toast.LENGTH_LONG,
+        ).show()
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val text = runCatching { readFromUri(context, uri) }.getOrDefault("")
+        if (text.isBlank()) {
+            Toast.makeText(context, "读取文件失败", Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        val count = runCatching { LocalStore.parseImportCount(text) }.getOrElse {
+            Toast.makeText(context, "这不是本应用的备份文件", Toast.LENGTH_LONG).show()
+            return@rememberLauncherForActivityResult
+        }
+        if (count == 0) {
+            Toast.makeText(context, "备份里没有记录", Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        pendingCount = count
+        pendingImport = text
+    }
+
+    fun runImport(merge: Boolean) {
+        val text = pendingImport ?: return
+        val count = runCatching { LocalStore.importFromJson(text, merge) }.getOrElse {
+            Toast.makeText(context, "导入失败：${it.message}", Toast.LENGTH_LONG).show()
+            pendingImport = null
+            return
+        }
+        ReminderScheduler.sync(context) // 备份里的提醒设置也一并恢复了
+        val restored = LocalStore.getSettings()
+        enabled = restored.reminderEnabled
+        time = restored.reminderTime
+        pendingImport = null
+        Toast.makeText(context, "已导入 $count 条记录", Toast.LENGTH_SHORT).show()
     }
 
     Column(
@@ -208,6 +275,61 @@ fun SettingsScreen() {
             }
         }
 
+        Spacer(Modifier.height(12.dp))
+
+        // 备份与恢复
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("备份与恢复", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text("数据只存在本机，换手机或重装前先导出", fontSize = 12.sp, color = Color(0xFF6B7280))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("导出备份（JSON）", fontSize = 16.sp)
+                        Text("完整备份，可再导入回来", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    }
+                    TextButton(onClick = {
+                        exportJsonLauncher.launch("knee-record-${fileStamp()}.json")
+                    }) { Text("导出") }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("导出表格（CSV）", fontSize = 16.sp)
+                        Text("一条记录一行，Excel 可打开", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    }
+                    TextButton(onClick = {
+                        exportCsvLauncher.launch("knee-record-${fileStamp()}.csv")
+                    }) { Text("导出") }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("从备份导入", fontSize = 16.sp)
+                        Text("选择之前导出的 JSON 文件", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    }
+                    TextButton(onClick = {
+                        importLauncher.launch(arrayOf("application/json", "text/plain"))
+                    }) { Text("导入") }
+                }
+            }
+        }
+
         Spacer(Modifier.height(20.dp))
         Text(
             "膝盖锻炼记录 · 本地数据版\n只负责记录与展示，不提供任何动作推荐或锻炼建议。",
@@ -238,4 +360,41 @@ fun SettingsScreen() {
             },
         )
     }
+
+    if (pendingImport != null) {
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            title = { Text("导入备份") },
+            text = {
+                Text(
+                    "文件里有 $pendingCount 条记录。\n\n" +
+                        "合并：保留本机现有记录，只补充不重复的。\n" +
+                        "替换：清空本机数据后再导入。\n\n" +
+                        "点空白处取消。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { runImport(merge = true) }) { Text("合并") }
+            },
+            dismissButton = {
+                TextButton(onClick = { runImport(merge = false) }) {
+                    Text("替换", color = Color(0xFFFF3B30))
+                }
+            },
+        )
+    }
 }
+
+private fun fileStamp(): String =
+    SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(Date())
+
+private fun writeToUri(context: Context, uri: Uri, text: String) {
+    context.contentResolver.openOutputStream(uri)?.use {
+        it.write(text.toByteArray(Charsets.UTF_8))
+    }
+}
+
+private fun readFromUri(context: Context, uri: Uri): String =
+    context.contentResolver.openInputStream(uri)?.use {
+        it.readBytes().toString(Charsets.UTF_8)
+    } ?: ""

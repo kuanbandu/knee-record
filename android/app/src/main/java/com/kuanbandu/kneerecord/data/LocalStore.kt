@@ -190,6 +190,151 @@ object LocalStore {
         recordsVersion.value++
     }
 
+    // -------------------------------------------------------------- 备份导出 / 导入
+
+    /** 完整备份：记录 + 个人资料 + 设置 */
+    fun exportJson(): String {
+        val root = JSONObject()
+        root.put("app", "knee-record")
+        root.put("version", 1)
+        root.put("exportedAt", System.currentTimeMillis())
+
+        val arr = JSONArray()
+        getRecords().forEach { arr.put(recordToJson(it)) }
+        root.put("records", arr)
+
+        val a = getAssessment()
+        if (a == null) {
+            root.put("assessment", JSONObject.NULL)
+        } else {
+            val ao = JSONObject()
+            ao.put("age", a.age)
+            ao.put("stage", a.stage)
+            ao.put("bendAngle", a.bendAngle)
+            ao.put("straightenOk", a.straightenOk)
+            ao.put("updatedAt", a.updatedAt)
+            root.put("assessment", ao)
+        }
+
+        val s = getSettings()
+        val so = JSONObject()
+        so.put("reminderEnabled", s.reminderEnabled)
+        so.put("reminderTime", s.reminderTime)
+        root.put("settings", so)
+        return root.toString(2)
+    }
+
+    /** 表格导出：一条记录一行，带 UTF-8 BOM，Excel 打开中文不乱码 */
+    fun exportCsv(): String {
+        val day = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val time = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val sb = StringBuilder()
+        sb.append('\uFEFF')
+        sb.append("日期,时间,身体感受,时长(分钟),动作,备注\n")
+        getRecords().forEach { r ->
+            val exercises = r.exercises.joinToString(" ") {
+                if (it.sets.isBlank()) it.name else "${it.name}(${it.sets}组)"
+            }
+            val cells = listOf(
+                day.format(Date(r.timestamp)),
+                time.format(Date(r.timestamp)),
+                r.feelingScore.toString(),
+                r.durationMin.toString(),
+                exercises,
+                r.note,
+            )
+            sb.append(cells.joinToString(",") { csvCell(it) }).append("\n")
+        }
+        return sb.toString()
+    }
+
+    private fun csvCell(value: String): String {
+        val needQuote = value.any { it == ',' || it == '"' || it == '\n' || it == '\r' }
+        return if (needQuote) "\"${value.replace("\"", "\"\"")}\"" else value
+    }
+
+    /** 导入前先看文件里有多少条，失败会抛异常由界面提示 */
+    fun parseImportCount(text: String): Int {
+        val root = JSONObject(text)
+        val arr = root.optJSONArray("records") ?: throw IllegalArgumentException("文件里没有记录数据")
+        return arr.length()
+    }
+
+    /**
+     * 导入备份。merge = true 按 id 去重后补充到现有记录；false 先清空再导入。
+     * 返回文件里的记录条数。
+     */
+    fun importFromJson(text: String, merge: Boolean): Int {
+        val root = JSONObject(text)
+        val arr = root.optJSONArray("records") ?: throw IllegalArgumentException("文件里没有记录数据")
+
+        val incoming = mutableListOf<Record>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val exs = o.optJSONArray("exercises") ?: JSONArray()
+            val exercises = mutableListOf<ExerciseEntry>()
+            for (j in 0 until exs.length()) {
+                val e = exs.optJSONObject(j) ?: continue
+                exercises.add(ExerciseEntry(e.optString("name"), e.optString("sets")))
+            }
+            val id = o.optString("id").ifBlank { "rec_${System.currentTimeMillis()}_$i" }
+            val ts = o.optLong("timestamp").takeIf { it > 0L } ?: System.currentTimeMillis()
+            incoming.add(
+                Record(
+                    id = id,
+                    date = o.optString("date").ifBlank { todayKey(ts) },
+                    timestamp = ts,
+                    feelingScore = o.optInt("feelingScore"),
+                    durationMin = o.optInt("durationMin"),
+                    note = o.optString("note"),
+                    exercises = exercises,
+                ),
+            )
+        }
+        if (incoming.isEmpty()) throw IllegalArgumentException("文件里没有可导入的记录")
+
+        val final = if (merge) {
+            val merged = getRecords().toMutableList()
+            val known = merged.map { it.id }.toHashSet()
+            incoming.forEach { if (it.id !in known) merged.add(it) }
+            merged.sortedByDescending { it.timestamp }
+        } else {
+            incoming.sortedByDescending { it.timestamp }
+        }
+
+        val out = JSONArray()
+        final.take(MAX_RECORDS).forEach { out.put(recordToJson(it)) }
+        write(F_RECORDS, out.toString())
+
+        // 个人资料：文件里有就覆盖，没有则保持本机不变
+        val ao = root.optJSONObject("assessment")
+        if (ao != null) {
+            val stage = ao.optString("stage", "")
+            if (stage.isNotBlank()) {
+                saveAssessment(
+                    Assessment(
+                        age = ao.optInt("age", 0),
+                        stage = stage,
+                        bendAngle = ao.optInt("bendAngle", 90),
+                        straightenOk = ao.optBoolean("straightenOk", false),
+                        updatedAt = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        }
+
+        val so = root.optJSONObject("settings")
+        if (so != null) {
+            updateSettings(
+                reminderEnabled = if (so.has("reminderEnabled")) so.optBoolean("reminderEnabled") else null,
+                reminderTime = so.optString("reminderTime", "").takeIf { it.isNotBlank() },
+            )
+        }
+
+        recordsVersion.value++
+        return incoming.size
+    }
+
     // -------------------------------------------------------------- 工具
 
     /** YYYY-MM-DD */

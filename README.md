@@ -99,6 +99,7 @@ tools/smoke.js        小程序页面流程冒烟（wx 桩，不进包体）
 - Kotlin + Jetpack Compose + Material3，除 AndroidX 外**无第三方依赖**，趋势图用 Compose Canvas 手绘。
 - 数据与小程序端结构完全一致，存在应用私有目录：`knee_records.json` / `knee_assessment.json` / `knee_settings.json`。
 - **每日提醒是真提醒**：本机 AlarmManager + 本地通知，不需要服务端（小程序端做不到，只能"打开时提示"）。Android 13+ 首次开启会请求通知权限；重启手机后需先打开一次应用才会重新排期。
+- **备份与恢复**：设置页可导出 JSON 完整备份（记录 + 个人资料 + 设置）或 CSV 表格（Excel 可直接打开，带 BOM）；导入时选择「合并」（按 id 去重补充）或「替换」（清空后导入）。文件通过系统文件选择器存到手机/网盘。
 - **云端编译**：每次 push 到 `main`，GitHub Actions（`.github/workflows/android.yml`）自动 `assembleDebug`，产物在 Actions 页面；打过 tag 的版本 APK 挂在 Releases 上。
 
 ## 已知限制
