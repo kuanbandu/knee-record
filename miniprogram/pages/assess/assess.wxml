@@ -1,0 +1,52 @@
+<view class="page">
+  <view wx:if="{{savedAtText}}" class="tip">
+    上次更新：{{savedAtText}}
+  </view>
+
+  <view class="card">
+    <view class="card-title">年龄</view>
+    <view class="input-wrap">
+      <input class="age-input" type="number" value="{{age}}" placeholder="请输入年龄"
+             bindinput="onAgeInput" placeholder-class="ph" />
+      <text class="unit">岁</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">当前阶段</view>
+    <view class="option-list">
+      <view wx:for="{{stageOptions}}" wx:key="value"
+            class="option {{stage === item.value ? 'option-active' : ''}}"
+            data-value="{{item.value}}" bindtap="onSelectStage">
+        <view class="option-row">
+          <text class="option-title">{{item.label}}</text>
+          <view class="radio {{stage === item.value ? 'radio-on' : ''}}"></view>
+        </view>
+        <view class="option-desc">{{item.desc}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">膝盖弯曲角度（自评）</view>
+    <view class="card-sub">脚跟往臀部方向滑，估计能弯到多少度</view>
+    <view class="bend-value mono-num">{{bendAngle}}°</view>
+    <slider min="30" max="135" step="5" value="{{bendAngle}}" show-value="{{false}}"
+            activeColor="#0a84ff" block-size="28" bindchange="onBendAngleChange" />
+    <view class="scale-row">
+      <text>30°（弯得少）</text>
+      <text>135°（弯得多）</text>
+    </view>
+
+    <view class="divider"></view>
+
+    <view class="row-between">
+      <view class="label">膝盖能完全伸直吗</view>
+      <switch checked="{{straightenOk}}" bindchange="onStraightenChange" color="#0a84ff" />
+    </view>
+  </view>
+
+  <button class="btn btn-primary btn-block save-btn" bindtap="onSave">保存</button>
+
+  <view class="foot-note">以上仅作为个人资料保存，不会参与任何推荐。</view>
+</view>

@@ -1,0 +1,12 @@
+{
+  "name": "knee-record-miniprogram",
+  "version": "0.1.0",
+  "private": true,
+  "description": "膝盖锻炼记录小程序（数据存本地，无后端）",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "smoke": "node tools/smoke.js"
+  }
+}

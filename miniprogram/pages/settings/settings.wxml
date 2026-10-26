@@ -1,0 +1,56 @@
+<view class="page">
+  <view class="card">
+    <view class="card-title">每日提醒</view>
+    <view class="row-between setting-row">
+      <view>
+        <view class="label">开启记录提醒</view>
+        <view class="hint">到点后打开小程序会看到提醒</view>
+      </view>
+      <switch checked="{{reminderEnabled}}" bindchange="onReminderChange" color="#0a84ff" />
+    </view>
+    <view class="divider"></view>
+    <view class="row-between setting-row">
+      <view>
+        <view class="label">提醒时间</view>
+        <view class="hint">小程序不支持后台定时推送，改为打开时提醒</view>
+      </view>
+      <picker mode="time" value="{{reminderTime}}" bindchange="onTimeChange">
+        <view class="time-picker mono-num">{{reminderTime}} ›</view>
+      </picker>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">使用须知</view>
+    <view class="notice-main">{{noticeText}}</view>
+    <view class="notice-detail">
+      <view wx:for="{{noticeDetail}}" wx:key="*this" class="notice-line">· {{item}}</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">我的数据</view>
+    <view class="row-between setting-row">
+      <view class="label">个人资料</view>
+      <text class="link" bindtap="onGoAssess">{{hasAssessment ? '去修改' : '去填写'}}</text>
+    </view>
+    <view class="divider"></view>
+    <view class="row-between setting-row">
+      <view class="label">已保存锻炼记录</view>
+      <text class="data-count mono-num">{{recordCount}} 条</text>
+    </view>
+    <view class="divider"></view>
+    <view class="row-between setting-row">
+      <view>
+        <view class="label danger-text">清除全部数据</view>
+        <view class="hint">数据全部保存在本机，不会上传</view>
+      </view>
+      <text class="link danger-text" bindtap="onClearAll">清除</text>
+    </view>
+  </view>
+
+  <view class="about">
+    <view>膝盖锻炼记录 · 本地数据版</view>
+    <view>只负责记录与展示，不提供任何动作推荐或锻炼建议。</view>
+  </view>
+</view>

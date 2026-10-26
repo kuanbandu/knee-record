@@ -1,0 +1,46 @@
+.setting-row {
+  padding: 8rpx 0;
+}
+
+.time-picker {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--brand);
+}
+
+.notice-main {
+  font-size: 32rpx;
+  font-weight: 600;
+  margin-top: 8rpx;
+}
+
+.notice-detail {
+  margin-top: 16rpx;
+}
+
+.notice-line {
+  font-size: 26rpx;
+  color: var(--sub);
+  margin-top: 6rpx;
+}
+
+.data-count {
+  font-size: 30rpx;
+  color: var(--sub);
+}
+
+.link {
+  color: var(--brand);
+  font-size: 29rpx;
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.about {
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--sub);
+  padding: 20rpx 40rpx 40rpx;
+}

@@ -1,0 +1,44 @@
+<view class="page">
+  <view class="card">
+    <view class="card-title">做了什么动作</view>
+    <view class="card-sub">自己填写，想写几个就加几行</view>
+    <view wx:for="{{exercises}}" wx:for-item="row" wx:key="uid" class="ex-row">
+      <input class="ex-name-input" value="{{row.name}}" data-index="{{index}}"
+             placeholder="动作名称，如 靠墙静蹲" placeholder-class="ph" bindinput="onNameInput" />
+      <input class="ex-sets-input" type="number" value="{{row.sets}}" data-index="{{index}}"
+             placeholder="组数" placeholder-class="ph" bindinput="onSetsInput" />
+      <view wx:if="{{exercises.length > 1}}" class="ex-del" data-index="{{index}}" bindtap="onRemoveExercise">×</view>
+      <view wx:else class="ex-del disabled">×</view>
+    </view>
+    <view class="add-row" bindtap="onAddExercise">＋ 再加一个动作</view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">身体感受评分</view>
+    <view class="card-sub">本次锻炼时膝盖的感觉</view>
+    <view class="pain-value mono-num">{{feelingScore}} / 10</view>
+    <slider min="0" max="10" step="1" value="{{feelingScore}}" show-value="{{false}}"
+            activeColor="#0a84ff" block-size="28" bindchange="onFeelingChange" />
+    <view class="scale-row">
+      <text>0 轻松</text>
+      <text>10 很难受</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">锻炼时长</view>
+    <view class="input-wrap">
+      <input type="digit" value="{{durationMin}}" placeholder="本次锻炼分钟数"
+             placeholder-class="ph" bindinput="onDurationInput" />
+      <text class="unit">分钟</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">备注（可选）</view>
+    <textarea class="note" value="{{note}}" maxlength="200" placeholder="比如：今天在健身房练的"
+              placeholder-class="ph" bindinput="onNoteInput" />
+  </view>
+
+  <button class="btn btn-primary btn-block save-btn" bindtap="onSave">保存记录</button>
+</view>
