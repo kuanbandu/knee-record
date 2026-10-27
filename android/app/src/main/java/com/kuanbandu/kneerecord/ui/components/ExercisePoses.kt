@@ -14,7 +14,8 @@ private val SUPINE_FREE = Pose(
 private val SIDE_FREE = Pose(
     stance = Stance.SIDE_LYING,
     legMode = LegMode.FREE,
-    hipY = 0.82f,
+    // 侧卧时髋离床面要留出骨盆的厚度，不然屈膝的腿会陷进地面
+    hipY = 0.76f,
 )
 
 private val POSES: Map<String, List<AnimFrame>> = mapOf(
@@ -68,9 +69,10 @@ private val POSES: Map<String, List<AnimFrame>> = mapOf(
         ),
     ),
 
+    // 终末伸膝：膝下垫卷，膝微屈，然后把膝完全伸直
     "terminal-knee-extension" to listOf(
-        AnimFrame(SUPINE_FREE.copy(hip = 22f, knee = 45f, prop = Prop.ROLL), moveMs = 900, holdMs = 300),
-        AnimFrame(SUPINE_FREE.copy(hip = 22f, knee = 2f, prop = Prop.ROLL), moveMs = 900, holdMs = 700),
+        AnimFrame(SUPINE_FREE.copy(hip = -4f, knee = 30f, prop = Prop.ROLL), moveMs = 900, holdMs = 300),
+        AnimFrame(SUPINE_FREE.copy(hip = -10f, knee = 0f, prop = Prop.ROLL), moveMs = 900, holdMs = 700),
     ),
 
     "glute-bridge" to listOf(
@@ -84,24 +86,26 @@ private val POSES: Map<String, List<AnimFrame>> = mapOf(
         ),
     ),
 
+    // 蚌式：侧卧、双腿屈膝、双脚并拢，上面那条腿的膝盖像蚌壳一样张开
+    // hip2/knee2 是贴床的下腿（微屈），hip/knee 是上面那条腿
     "clam-shell" to listOf(
         AnimFrame(
-            SIDE_FREE.copy(hip = 10f, knee = 90f, hip2 = 20f, knee2 = 25f),
-            moveMs = 700, holdMs = 300,
+            SIDE_FREE.copy(hip = 2f, knee = 72f, hip2 = -2f, knee2 = 60f),
+            moveMs = 750, holdMs = 350,
         ),
         AnimFrame(
-            SIDE_FREE.copy(hip = 50f, knee = 90f, hip2 = 20f, knee2 = 25f),
-            moveMs = 700, holdMs = 500,
+            SIDE_FREE.copy(hip = 28f, knee = 108f, hip2 = -2f, knee2 = 60f),
+            moveMs = 750, holdMs = 550,
         ),
     ),
 
     "side-lying-leg-raise" to listOf(
         AnimFrame(
-            SIDE_FREE.copy(hip = 0f, knee = 0f, hip2 = 15f, knee2 = 20f),
+            SIDE_FREE.copy(hip = -20f, knee = 5f, hip2 = -20f, knee2 = 12f),
             moveMs = 900, holdMs = 300,
         ),
         AnimFrame(
-            SIDE_FREE.copy(hip = 45f, knee = 0f, hip2 = 15f, knee2 = 20f),
+            SIDE_FREE.copy(hip = 25f, knee = 5f, hip2 = -20f, knee2 = 12f),
             moveMs = 900, holdMs = 600,
         ),
     ),
@@ -117,13 +121,14 @@ private val POSES: Map<String, List<AnimFrame>> = mapOf(
         ),
     ),
 
+    // 靠墙静蹲：墙在背后，躯干贴着墙竖直，脚向前伸
     "wall-sit-60" to listOf(
         AnimFrame(
-            Pose(stance = Stance.STANDING, hipY = 0.70f, footX = 0.12f, arm = 40f, prop = Prop.WALL),
+            Pose(stance = Stance.STANDING, hipY = 0.70f, footX = 0.12f, arm = 40f, prop = Prop.WALL_BACK),
             moveMs = 800, holdMs = 700,
         ),
         AnimFrame(
-            Pose(stance = Stance.STANDING, hipY = 0.708f, footX = 0.125f, arm = 42f, prop = Prop.WALL),
+            Pose(stance = Stance.STANDING, hipY = 0.708f, footX = 0.125f, arm = 42f, prop = Prop.WALL_BACK),
             moveMs = 800, holdMs = 700,
         ),
     ),
@@ -209,13 +214,14 @@ private val POSES: Map<String, List<AnimFrame>> = mapOf(
         AnimFrame(SUPINE_FREE.copy(hip = 82f, knee = 0f, arm = 110f, prop = Prop.BAND), moveMs = 1000, holdMs = 900),
     ),
 
+    // 股四头肌拉伸：单手扶墙，另一条腿屈膝把脚跟拉向臀部
     "quad-stretch" to listOf(
         AnimFrame(
-            Pose(stance = Stance.STANDING, legMode = LegMode.FREE, hip = 0f, knee = 6f, hip2 = -12f, knee2 = 100f, arm = 145f, prop = Prop.WALL),
+            Pose(stance = Stance.STANDING, legMode = LegMode.FREE, hip = 0f, knee = 6f, hip2 = -12f, knee2 = 100f, arm = 85f, prop = Prop.WALL),
             moveMs = 800, holdMs = 400,
         ),
         AnimFrame(
-            Pose(stance = Stance.STANDING, legMode = LegMode.FREE, hip = 0f, knee = 6f, hip2 = -22f, knee2 = 128f, arm = 150f, prop = Prop.WALL),
+            Pose(stance = Stance.STANDING, legMode = LegMode.FREE, hip = 0f, knee = 6f, hip2 = -22f, knee2 = 128f, arm = 90f, prop = Prop.WALL),
             moveMs = 800, holdMs = 900,
         ),
     ),
@@ -241,3 +247,29 @@ fun framesFor(exerciseId: String): List<AnimFrame> = POSES[exerciseId] ?: FALLBA
 
 /** 哪些动作还没配示范动画，供启动自检用 */
 fun missingAnimations(ids: List<String>): List<String> = ids.filter { !POSES.containsKey(it) }
+
+/**
+ * 启动自检：逐个动作把关键帧和中间姿势都算一遍，
+ * 只要有一帧陷进地面或者画出画面外就报出来。
+ * 这类问题在手机上很难一眼看出，交给机器查。
+ */
+fun animationIssues(): List<String> {
+    val issues = mutableListOf<String>()
+    POSES.forEach { (id, frames) ->
+        frames.forEachIndexed { i, frame ->
+            val next = frames[(i + 1) % frames.size]
+            for (step in 0..4) {
+                val pose = if (step == 0) frame.pose else lerpPose(frame.pose, next.pose, step / 4f)
+                val label = "$id 第 ${i + 1} 帧（中间 $step/4）"
+                val penetration = groundPenetration(pose)
+                if (penetration > 0.015f) {
+                    issues.add("$label 陷进地面 ${(penetration * 100).toInt()}%")
+                }
+                if (figureOutOfFrame(pose)) {
+                    issues.add("$label 画出画面外")
+                }
+            }
+        }
+    }
+    return issues
+}

@@ -27,8 +27,8 @@ enum class Stance { STANDING, SUPINE, SIDE_LYING }
 /** 腿的求解方式：脚踩地面用 IK（自然），腿在空中用角度（可控） */
 enum class LegMode { IK, FREE }
 
-/** 示范道具 */
-enum class Prop { NONE, WALL, STEP, PILLOW, ROLL, BAND, CHAIR, PATELLA }
+/** 示范道具。WALL 在身前（推墙/扶墙），WALL_BACK 在背后（靠墙静蹲） */
+enum class Prop { NONE, WALL, WALL_BACK, STEP, PILLOW, ROLL, BAND, CHAIR, PATELLA }
 
 /** 一个姿势。坐标是归一化 0..1，y 向下，地面在 GROUND_Y */
 data class Pose(
@@ -112,9 +112,44 @@ private class Body(
     val knee2: Offset?,
     val ankle2: Offset?,
     val toe2: Offset?,
-)
+) {
+    fun points(): List<Offset> = listOf(hip, shoulder, head, hand, knee1, ankle1, toe1) +
+        listOfNotNull(knee2, ankle2, toe2)
+
+    fun maxY(): Float = points().maxOf { it.y }
+
+    fun shifted(dy: Float): Body = Body(
+        hip = Offset(hip.x, hip.y + dy),
+        shoulder = Offset(shoulder.x, shoulder.y + dy),
+        head = Offset(head.x, head.y + dy),
+        hand = Offset(hand.x, hand.y + dy),
+        knee1 = Offset(knee1.x, knee1.y + dy),
+        ankle1 = Offset(ankle1.x, ankle1.y + dy),
+        toe1 = Offset(toe1.x, toe1.y + dy),
+        knee2 = knee2?.let { Offset(it.x, it.y + dy) },
+        ankle2 = ankle2?.let { Offset(it.x, it.y + dy) },
+        toe2 = toe2?.let { Offset(it.x, it.y + dy) },
+    )
+}
 
 private fun build(pose: Pose): Body {
+    val body = compute(pose)
+    // 兜底：骨架任何一点陷到地面以下就把整体上移，宁可浮空也不穿地板
+    val penetration = body.maxY() - GROUND_Y
+    return if (penetration > 0f) body.shifted(-penetration) else body
+}
+
+/** 这个姿势有多少陷进地面（0 表示正好站在/躺在地面上），启动自检用 */
+fun groundPenetration(pose: Pose): Float = compute(pose).maxY() - GROUND_Y
+
+/** 这个姿势有没有画出画面外，启动自检用 */
+fun figureOutOfFrame(pose: Pose): Boolean = compute(pose).points()
+    .any { it.x < 0.02f || it.x > 0.98f || it.y < 0.02f || it.y > 0.98f }
+
+/** 一条腿：膝、踝、小腿方向角（脚掌要垂直于小腿） */
+private data class Leg(val knee: Offset, val ankle: Offset, val shankDeg: Float)
+
+private fun compute(pose: Pose): Body {
     val hip = when (pose.stance) {
         Stance.STANDING -> Offset(HIP_X, pose.hipY)
         Stance.SUPINE, Stance.SIDE_LYING -> Offset(HIP_X_SIDE, pose.hipY)
@@ -146,59 +181,68 @@ private fun build(pose: Pose): Body {
         shoulder = shoulder,
         head = head,
         hand = hand,
-        knee1 = leg1.first,
-        ankle1 = leg1.second,
-        toe1 = foot(leg1.second, pose.ankle, pose),
-        knee2 = leg2?.first,
-        ankle2 = leg2?.second,
-        toe2 = leg2?.second?.let { foot(it, pose.ankle, pose) },
+        knee1 = leg1.knee,
+        ankle1 = leg1.ankle,
+        toe1 = foot(leg1.ankle, leg1.shankDeg, pose),
+        knee2 = leg2?.knee,
+        ankle2 = leg2?.ankle,
+        toe2 = leg2?.let { foot(it.ankle, it.shankDeg, pose) },
     )
 }
 
-private fun solveLeg(pose: Pose, hip: Offset): Pair<Offset, Offset> {
+private fun solveLeg(pose: Pose, hip: Offset): Leg {
     if (pose.legMode == LegMode.IK) {
-        val foot = Offset(hip.x + pose.footX, pose.footY)
-        return ik(hip, foot, L_THIGH, L_SHANK) to foot
+        val ankle = Offset(hip.x + pose.footX, pose.footY)
+        val dx = ankle.x - hip.x
+        val dy = ankle.y - hip.y
+        return Leg(
+            knee = ik(hip, ankle, L_THIGH, L_SHANK),
+            ankle = ankle,
+            shankDeg = Math.toDegrees(kotlin.math.atan2(dx.toDouble(), dy.toDouble())).toFloat(),
+        )
     }
     val base = if (pose.stance == Stance.STANDING) 0f else 90f
     val thighDeg = base + pose.hip
     val shankDeg = thighDeg - pose.knee
     val knee = hip + dir(thighDeg) * L_THIGH
-    return knee to (knee + dir(shankDeg) * L_SHANK)
+    return Leg(knee, knee + dir(shankDeg) * L_SHANK, shankDeg)
 }
 
-private fun solveLeg2(pose: Pose, hip: Offset): Pair<Offset, Offset> {
+private fun solveLeg2(pose: Pose, hip: Offset): Leg {
     if (pose.stance == Stance.SIDE_LYING) {
-        // 侧卧：hip2 / knee2 是下腿
-        val thighDeg = 90f + pose.hip2
-        val knee = hip + dir(thighDeg) * L_THIGH
-        return knee to (knee + dir(thighDeg - pose.knee2) * L_SHANK)
+        // 侧卧：hip2 / knee2 是贴床那条腿
+        return angledLeg(hip, 90f + pose.hip2, pose.knee2)
     }
     if (pose.legMode == LegMode.IK) {
-        val x = pose.foot2X ?: return (hip to hip)
-        val foot = Offset(hip.x + x, pose.footY)
-        return ik(hip, foot, L_THIGH, L_SHANK) to foot
+        val x = pose.foot2X ?: return Leg(hip, hip, 0f)
+        val ankle = Offset(hip.x + x, pose.footY)
+        val dx = ankle.x - hip.x
+        val dy = ankle.y - hip.y
+        return Leg(
+            knee = ik(hip, ankle, L_THIGH, L_SHANK),
+            ankle = ankle,
+            shankDeg = Math.toDegrees(kotlin.math.atan2(dx.toDouble(), dy.toDouble())).toFloat(),
+        )
     }
     val base = if (pose.stance == Stance.STANDING) 0f else 90f
-    val thighDeg = base + pose.hip2
-    val knee = hip + dir(thighDeg) * L_THIGH
-    return knee to (knee + dir(thighDeg - pose.knee2) * L_SHANK)
+    return angledLeg(hip, base + pose.hip2, pose.knee2)
 }
 
-/** 脚掌：垂直于小腿往前伸，背屈时脚尖上抬 */
-private fun foot(ankle: Offset, ankleDeg: Float, pose: Pose): Offset {
-    if (pose.stance == Stance.STANDING && pose.legMode == LegMode.IK) {
+private fun angledLeg(hip: Offset, thighDeg: Float, kneeDeg: Float): Leg {
+    val shankDeg = thighDeg - kneeDeg
+    val knee = hip + dir(thighDeg) * L_THIGH
+    return Leg(knee, knee + dir(shankDeg) * L_SHANK, shankDeg)
+}
+
+/** 脚掌：踩地时平放（背屈脚尖上抬），腿在空中时垂直于小腿 */
+private fun foot(ankle: Offset, shankDeg: Float, pose: Pose): Offset {
+    if (pose.legMode == LegMode.IK) {
         return Offset(
             ankle.x + L_FOOT * cos(Math.toRadians(pose.ankle.toDouble() * 0.7).toFloat()),
             ankle.y - 0.014f - pose.ankle * 0.0009f,
         )
     }
-    return ankle + dir(shankDegOf(pose) + 90f + ankleDeg) * L_FOOT
-}
-
-private fun shankDegOf(pose: Pose): Float {
-    val base = if (pose.stance == Stance.STANDING) 0f else 90f
-    return base + pose.hip - pose.knee
+    return ankle + dir(shankDeg + 90f + pose.ankle) * L_FOOT
 }
 
 // ---------------------------------------------------------------- 渲染
@@ -267,18 +311,39 @@ private fun DrawScope.drawProp(
     when (pose.prop) {
         Prop.NONE -> Unit
         Prop.WALL -> {
+            // 墙在身前：推墙、扶墙
+            val x = body.hip.x + 0.26f
             drawLine(
                 color = PropColor,
-                start = px(Offset(0.86f, 0.16f)),
-                end = px(Offset(0.86f, GROUND_Y)),
+                start = px(Offset(x, 0.16f)),
+                end = px(Offset(x, GROUND_Y)),
                 strokeWidth = w * 2,
             )
             for (i in 0..3) {
                 val y = 0.30f + i * 0.16f
                 drawLine(
                     color = PropColor,
-                    start = px(Offset(0.86f, y)),
-                    end = px(Offset(0.80f, y + 0.05f)),
+                    start = px(Offset(x, y)),
+                    end = px(Offset(x - 0.06f, y + 0.05f)),
+                    strokeWidth = w,
+                )
+            }
+        }
+        Prop.WALL_BACK -> {
+            // 墙在背后：靠墙静蹲，背贴着墙
+            val x = body.hip.x - 0.08f
+            drawLine(
+                color = PropColor,
+                start = px(Offset(x, 0.16f)),
+                end = px(Offset(x, GROUND_Y)),
+                strokeWidth = w * 2,
+            )
+            for (i in 0..3) {
+                val y = 0.30f + i * 0.16f
+                drawLine(
+                    color = PropColor,
+                    start = px(Offset(x, y)),
+                    end = px(Offset(x + 0.06f, y + 0.05f)),
                     strokeWidth = w,
                 )
             }
@@ -299,15 +364,16 @@ private fun DrawScope.drawProp(
         Prop.PILLOW -> {
             drawOval(
                 color = Color(0xFFE5E7EB),
-                topLeft = px(Offset(0.50f, body.knee1.y - 0.045f + pose.propOffset)),
+                topLeft = px(Offset(0.50f, body.knee1.y - 0.035f + pose.propOffset)),
                 size = Size(0.12f * scale, 0.07f * scale),
             )
         }
         Prop.ROLL -> {
+            // 膝下垫的卷：贴着地面，正好托住膝盖
             drawCircle(
                 color = Color(0xFFE5E7EB),
-                radius = scale * 0.032f,
-                center = px(Offset(body.knee1.x - 0.01f, GROUND_Y - 0.032f)),
+                radius = scale * 0.035f,
+                center = px(Offset(body.knee1.x, GROUND_Y - 0.035f)),
             )
         }
         Prop.BAND -> {
@@ -320,17 +386,25 @@ private fun DrawScope.drawProp(
             )
         }
         Prop.CHAIR -> {
+            // 椅子跟着人走，伸手够得着
+            val x = body.hip.x + 0.24f
             drawLine(
                 color = PropColor,
-                start = px(Offset(0.80f, 0.58f)),
-                end = px(Offset(0.80f, GROUND_Y)),
+                start = px(Offset(x, 0.40f)),
+                end = px(Offset(x, 0.56f)),
                 strokeWidth = w,
             )
             drawLine(
                 color = PropColor,
-                start = px(Offset(0.70f, 0.58f)),
-                end = px(Offset(0.92f, 0.58f)),
+                start = px(Offset(x - 0.12f, 0.56f)),
+                end = px(Offset(x + 0.10f, 0.56f)),
                 strokeWidth = w * 1.5f,
+            )
+            drawLine(
+                color = PropColor,
+                start = px(Offset(x, 0.56f)),
+                end = px(Offset(x, GROUND_Y)),
+                strokeWidth = w,
             )
         }
         Prop.PATELLA -> {
@@ -347,7 +421,7 @@ private fun DrawScope.drawProp(
 
 private fun lerp(a: Float, b: Float, k: Float) = a + (b - a) * k
 
-private fun lerpPose(a: Pose, b: Pose, k: Float) = Pose(
+fun lerpPose(a: Pose, b: Pose, k: Float) = Pose(
     stance = a.stance,
     legMode = a.legMode,
     trunkAuto = a.trunkAuto,
