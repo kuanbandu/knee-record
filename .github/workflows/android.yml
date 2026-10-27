@@ -28,14 +28,10 @@ jobs:
         working-directory: android
         run: gradle --no-daemon assembleDebug
 
-      # 产物名字里带上版本号（APK 本身在 gradle 里已改名，这里让下载包也带）
-      - name: Read version
-        id: ver
-        run: echo "value=$(grep -o 'versionName = \"[^\"]*' android/app/build.gradle.kts | head -1 | cut -d'\"' -f2)" >> "$GITHUB_OUTPUT"
-
+      # APK 文件名在 gradle 里已改成 knee-rehab-v<版本>-debug.apk，这里原样上传
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: knee-rehab-v${{ steps.ver.outputs.value }}
+          name: knee-rehab-apk
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
