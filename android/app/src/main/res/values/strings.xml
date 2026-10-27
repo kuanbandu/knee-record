@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">膝盖锻炼记录</string>
-    <string name="reminder_channel_name">记录提醒</string>
-    <string name="reminder_title">该记一下今天的锻炼了</string>
-    <string name="reminder_text">把今天练的内容和身体感受记下来。</string>
+    <string name="app_name">膝盖康复训练</string>
+    <string name="reminder_channel_name">训练提醒</string>
+    <string name="reminder_title">今天的训练还没开始</string>
+    <string name="reminder_text">先确认疼痛评分和 ROM 活动度，再开始跟练。</string>
 </resources>

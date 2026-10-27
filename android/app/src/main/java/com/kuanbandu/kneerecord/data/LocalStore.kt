@@ -10,25 +10,25 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
 /**
- * 本地存储层：三个 JSON 文件放在应用私有目录，无后端、无上传。
- * 界面只允许通过这里读写数据。
+ * 本地存储层（应用私有目录，三个 JSON 文件）。
+ * 所有界面只允许通过这里读写数据。
  */
 object LocalStore {
 
     private const val F_RECORDS = "knee_records.json"
     private const val F_ASSESSMENT = "knee_assessment.json"
     private const val F_SETTINGS = "knee_settings.json"
-
-    /** 记录条数上限 */
     private const val MAX_RECORDS = 200
 
-    /** 数据版本号：任何写入后自增，界面靠它决定是否重新读取 */
+    /** 记录版本号，界面用它触发刷新 */
     val recordsVersion = mutableStateOf(0)
+
+    /** 个人资料版本号，训练清单据此重算 */
+    val assessmentVersion = mutableStateOf(0)
 
     private lateinit var dir: File
 
@@ -36,42 +36,24 @@ object LocalStore {
         dir = context.filesDir
     }
 
-    // -------------------------------------------------------------- 读写工具
-
-    private fun file(name: String) = File(dir, name)
-
-    private fun readArray(name: String): JSONArray {
-        val f = file(name)
-        if (!f.exists()) return JSONArray()
-        return try {
-            JSONArray(f.readText())
-        } catch (ignored: Exception) {
-            JSONArray()
+    private fun file(name: String): File {
+        if (!::dir.isInitialized) {
+            throw IllegalStateException("LocalStore 未初始化")
         }
+        return File(dir, name)
     }
 
-    private fun readObject(name: String): JSONObject {
-        val f = file(name)
-        if (!f.exists()) return JSONObject()
-        return try {
-            JSONObject(f.readText())
-        } catch (ignored: Exception) {
-            JSONObject()
-        }
+    private fun readText(name: String): String? =
+        runCatching { file(name).readText() }.getOrNull()?.takeIf { it.isNotBlank() }
+
+    private fun writeText(name: String, text: String) {
+        file(name).writeText(text)
     }
 
-    private fun write(name: String, text: String) {
-        try {
-            file(name).writeText(text)
-        } catch (ignored: Exception) {
-            // 写入失败不阻断记录流程
-        }
-    }
-
-    // -------------------------------------------------------------- 锻炼记录
+    // -------------------------------------------------------------- 训练记录
 
     fun getRecords(): List<Record> {
-        val arr = readArray(F_RECORDS)
+        val arr = JSONArray(readText(F_RECORDS) ?: "[]")
         val out = mutableListOf<Record>()
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
@@ -81,75 +63,77 @@ object LocalStore {
                 val e = exs.optJSONObject(j) ?: continue
                 exercises.add(ExerciseEntry(e.optString("name"), e.optString("sets")))
             }
+            val ts = o.optLong("timestamp").takeIf { it > 0L } ?: System.currentTimeMillis()
             out.add(
                 Record(
-                    id = o.optString("id"),
-                    date = o.optString("date"),
-                    timestamp = o.optLong("timestamp"),
-                    feelingScore = o.optInt("feelingScore"),
+                    id = o.optString("id").ifBlank { "rec_$ts" },
+                    date = o.optString("date").ifBlank { todayKey(ts) },
+                    timestamp = ts,
+                    painBefore = o.optInt("painBefore", o.optInt("feelingScore")),
+                    painPeak = o.optInt("painPeak", o.optInt("feelingScore")),
+                    rpe = o.optInt("rpe"),
                     durationMin = o.optInt("durationMin"),
                     note = o.optString("note"),
                     exercises = exercises,
                 ),
             )
         }
-        return out
+        return out.sortedByDescending { it.timestamp }
     }
 
     fun addRecord(record: Record) {
-        val arr = readArray(F_RECORDS)
-        val out = JSONArray()
-        out.put(recordToJson(record))
-        for (i in 0 until arr.length()) {
-            if (out.length() >= MAX_RECORDS) break
-            out.put(arr.optJSONObject(i) ?: continue)
-        }
-        write(F_RECORDS, out.toString())
+        val list = getRecords().toMutableList()
+        list.add(0, record)
+        val arr = JSONArray()
+        list.take(MAX_RECORDS).forEach { arr.put(recordToJson(it)) }
+        writeText(F_RECORDS, arr.toString())
         recordsVersion.value++
     }
 
-    fun removeRecord(id: String) {
-        val arr = readArray(F_RECORDS)
-        val out = JSONArray()
-        for (i in 0 until arr.length()) {
-            val o = arr.optJSONObject(i) ?: continue
-            if (o.optString("id") != id) out.put(o)
-        }
-        write(F_RECORDS, out.toString())
+    fun deleteRecord(id: String) {
+        val arr = JSONArray()
+        getRecords().filter { it.id != id }.forEach { arr.put(recordToJson(it)) }
+        writeText(F_RECORDS, arr.toString())
         recordsVersion.value++
     }
 
     private fun recordToJson(r: Record): JSONObject {
-        val exs = JSONArray()
-        r.exercises.forEach { e ->
-            val o = JSONObject()
-            o.put("name", e.name)
-            o.put("sets", e.sets)
-            exs.put(o)
-        }
         val o = JSONObject()
         o.put("id", r.id)
         o.put("date", r.date)
         o.put("timestamp", r.timestamp)
-        o.put("feelingScore", r.feelingScore)
+        o.put("painBefore", r.painBefore)
+        o.put("painPeak", r.painPeak)
+        o.put("rpe", r.rpe)
         o.put("durationMin", r.durationMin)
         o.put("note", r.note)
+        val exs = JSONArray()
+        r.exercises.forEach { e ->
+            val eo = JSONObject()
+            eo.put("name", e.name)
+            eo.put("sets", e.sets)
+            exs.put(eo)
+        }
         o.put("exercises", exs)
         return o
     }
 
-    // -------------------------------------------------------------- 个人资料
+    /** 今天是否已经有训练记录 */
+    fun hasToday(): Boolean = getRecords().any { it.date == todayKey() }
+
+    // -------------------------------------------------------------- 评估结果
 
     fun getAssessment(): Assessment? {
-        val o = readObject(F_ASSESSMENT)
-        val stage = o.optString("stage", "")
-        if (stage.isBlank()) return null
+        val text = readText(F_ASSESSMENT) ?: return null
+        val o = runCatching { JSONObject(text) }.getOrNull() ?: return null
+        if (o.optString("stage", "").isBlank()) return null
         return Assessment(
-            age = o.optInt("age", 0),
-            stage = stage,
-            bendAngle = o.optInt("bendAngle", 90),
-            straightenOk = o.optBoolean("straightenOk", false),
-            updatedAt = o.optLong("updatedAt", 0L),
+            age = o.optInt("age"),
+            stage = o.optString("stage"),
+            painScore = o.optInt("painScore", o.optInt("feelingScore")),
+            romFlexion = o.optInt("romFlexion", o.optInt("bendAngle", 90)),
+            extensionLimited = o.optBoolean("extensionLimited", !o.optBoolean("straightenOk", true)),
+            updatedAt = o.optLong("updatedAt"),
         )
     }
 
@@ -157,46 +141,60 @@ object LocalStore {
         val o = JSONObject()
         o.put("age", a.age)
         o.put("stage", a.stage)
-        o.put("bendAngle", a.bendAngle)
-        o.put("straightenOk", a.straightenOk)
-        o.put("updatedAt", System.currentTimeMillis())
-        write(F_ASSESSMENT, o.toString())
+        o.put("painScore", a.painScore)
+        o.put("romFlexion", a.romFlexion)
+        o.put("extensionLimited", a.extensionLimited)
+        o.put("updatedAt", a.updatedAt)
+        writeText(F_ASSESSMENT, o.toString())
+        assessmentVersion.value++
     }
 
     // -------------------------------------------------------------- 设置
 
     fun getSettings(): Settings {
-        val o = readObject(F_SETTINGS)
-        val time = o.optString("reminderTime", "")
+        val o = runCatching { JSONObject(readText(F_SETTINGS) ?: "{}") }.getOrNull() ?: JSONObject()
         return Settings(
             reminderEnabled = o.optBoolean("reminderEnabled", false),
-            reminderTime = if (time.isBlank()) "19:00" else time,
+            reminderTime = o.optString("reminderTime", "").takeIf { it.isNotBlank() } ?: "19:00",
+            consentAt = o.optLong("consentAt"),
         )
     }
 
-    /** 分次保存时与已有设置合并，避免互相覆盖 */
-    fun updateSettings(reminderEnabled: Boolean? = null, reminderTime: String? = null) {
-        val cur = getSettings()
+    fun updateSettings(
+        reminderEnabled: Boolean? = null,
+        reminderTime: String? = null,
+        consentAt: Long? = null,
+    ): Settings {
+        val current = getSettings()
+        val next = Settings(
+            reminderEnabled = reminderEnabled ?: current.reminderEnabled,
+            reminderTime = reminderTime ?: current.reminderTime,
+            consentAt = consentAt ?: current.consentAt,
+        )
         val o = JSONObject()
-        o.put("reminderEnabled", reminderEnabled ?: cur.reminderEnabled)
-        o.put("reminderTime", reminderTime ?: cur.reminderTime)
-        write(F_SETTINGS, o.toString())
+        o.put("reminderEnabled", next.reminderEnabled)
+        o.put("reminderTime", next.reminderTime)
+        o.put("consentAt", next.consentAt)
+        writeText(F_SETTINGS, o.toString())
+        return next
     }
 
     fun clearAll() {
-        write(F_RECORDS, JSONArray().toString())
-        file(F_ASSESSMENT).delete()
-        updateSettings(reminderEnabled = false, reminderTime = "19:00")
-        recordsVersion.value++
+        runCatching {
+            writeText(F_RECORDS, "[]")
+            writeText(F_ASSESSMENT, "")
+            writeText(F_SETTINGS, "")
+            recordsVersion.value++
+            assessmentVersion.value++
+        }
     }
 
     // -------------------------------------------------------------- 备份导出 / 导入
 
-    /** 完整备份：记录 + 个人资料 + 设置 */
     fun exportJson(): String {
         val root = JSONObject()
         root.put("app", "knee-record")
-        root.put("version", 1)
+        root.put("version", 2)
         root.put("exportedAt", System.currentTimeMillis())
 
         val arr = JSONArray()
@@ -210,8 +208,9 @@ object LocalStore {
             val ao = JSONObject()
             ao.put("age", a.age)
             ao.put("stage", a.stage)
-            ao.put("bendAngle", a.bendAngle)
-            ao.put("straightenOk", a.straightenOk)
+            ao.put("painScore", a.painScore)
+            ao.put("romFlexion", a.romFlexion)
+            ao.put("extensionLimited", a.extensionLimited)
             ao.put("updatedAt", a.updatedAt)
             root.put("assessment", ao)
         }
@@ -224,13 +223,12 @@ object LocalStore {
         return root.toString(2)
     }
 
-    /** 表格导出：一条记录一行，带 UTF-8 BOM，Excel 打开中文不乱码 */
     fun exportCsv(): String {
         val day = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val time = SimpleDateFormat("HH:mm", Locale.getDefault())
         val sb = StringBuilder()
         sb.append('\uFEFF')
-        sb.append("日期,时间,身体感受,时长(分钟),动作,备注\n")
+        sb.append("日期,时间,训练前疼痛,疼痛峰值,自觉疲劳(RPE),时长(分钟),动作,备注\n")
         getRecords().forEach { r ->
             val exercises = r.exercises.joinToString(" ") {
                 if (it.sets.isBlank()) it.name else "${it.name}(${it.sets}组)"
@@ -238,7 +236,9 @@ object LocalStore {
             val cells = listOf(
                 day.format(Date(r.timestamp)),
                 time.format(Date(r.timestamp)),
-                r.feelingScore.toString(),
+                r.painBefore.toString(),
+                r.painPeak.toString(),
+                r.rpe.toString(),
                 r.durationMin.toString(),
                 exercises,
                 r.note,
@@ -253,17 +253,12 @@ object LocalStore {
         return if (needQuote) "\"${value.replace("\"", "\"\"")}\"" else value
     }
 
-    /** 导入前先看文件里有多少条，失败会抛异常由界面提示 */
     fun parseImportCount(text: String): Int {
         val root = JSONObject(text)
         val arr = root.optJSONArray("records") ?: throw IllegalArgumentException("文件里没有记录数据")
         return arr.length()
     }
 
-    /**
-     * 导入备份。merge = true 按 id 去重后补充到现有记录；false 先清空再导入。
-     * 返回文件里的记录条数。
-     */
     fun importFromJson(text: String, merge: Boolean): Int {
         val root = JSONObject(text)
         val arr = root.optJSONArray("records") ?: throw IllegalArgumentException("文件里没有记录数据")
@@ -284,7 +279,9 @@ object LocalStore {
                     id = id,
                     date = o.optString("date").ifBlank { todayKey(ts) },
                     timestamp = ts,
-                    feelingScore = o.optInt("feelingScore"),
+                    painBefore = o.optInt("painBefore", o.optInt("feelingScore")),
+                    painPeak = o.optInt("painPeak", o.optInt("feelingScore")),
+                    rpe = o.optInt("rpe"),
                     durationMin = o.optInt("durationMin"),
                     note = o.optString("note"),
                     exercises = exercises,
@@ -304,9 +301,8 @@ object LocalStore {
 
         val out = JSONArray()
         final.take(MAX_RECORDS).forEach { out.put(recordToJson(it)) }
-        write(F_RECORDS, out.toString())
+        writeText(F_RECORDS, out.toString())
 
-        // 个人资料：文件里有就覆盖，没有则保持本机不变
         val ao = root.optJSONObject("assessment")
         if (ao != null) {
             val stage = ao.optString("stage", "")
@@ -315,8 +311,9 @@ object LocalStore {
                     Assessment(
                         age = ao.optInt("age", 0),
                         stage = stage,
-                        bendAngle = ao.optInt("bendAngle", 90),
-                        straightenOk = ao.optBoolean("straightenOk", false),
+                        painScore = ao.optInt("painScore"),
+                        romFlexion = ao.optInt("romFlexion", 90),
+                        extensionLimited = ao.optBoolean("extensionLimited", false),
                         updatedAt = System.currentTimeMillis(),
                     ),
                 )
@@ -341,22 +338,6 @@ object LocalStore {
     fun todayKey(ts: Long = System.currentTimeMillis()): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(ts))
 
-    /** MM-DD HH:mm */
     fun formatDateTime(ts: Long): String =
-        SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(ts))
-
-    /** 打开应用时若已过提醒时间且今天还没记录，返回一行提示文案 */
-    fun reminderTip(): String {
-        val s = getSettings()
-        if (!s.reminderEnabled) return ""
-        val parts = s.reminderTime.split(":")
-        val hour = parts.getOrNull(0)?.toIntOrNull() ?: return ""
-        val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
-        val now = Calendar.getInstance()
-        val current = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-        val today = todayKey()
-        if (current < hour * 60 + minute) return ""
-        if (getRecords().any { it.date == today }) return ""
-        return "提醒时间是 ${s.reminderTime}，今天还没有记录。"
-    }
+        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(ts))
 }

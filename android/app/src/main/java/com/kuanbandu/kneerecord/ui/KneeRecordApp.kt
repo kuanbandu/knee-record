@@ -1,5 +1,6 @@
 package com.kuanbandu.kneerecord.ui
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -8,82 +9,80 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.sp
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.kuanbandu.kneerecord.ui.screens.AssessScreen
 import com.kuanbandu.kneerecord.ui.screens.EntryScreen
-import com.kuanbandu.kneerecord.ui.screens.ProfileScreen
+import com.kuanbandu.kneerecord.ui.screens.PlanScreen
 import com.kuanbandu.kneerecord.ui.screens.RecordsScreen
 import com.kuanbandu.kneerecord.ui.screens.SettingsScreen
+import com.kuanbandu.kneerecord.ui.screens.WorkoutScreen
 
-private const val ROUTE_RECORDS = "records"
-private const val ROUTE_ENTRY = "entry"
-private const val ROUTE_PROFILE = "profile"
-private const val ROUTE_SETTINGS = "settings"
+private data class TabItem(val route: String, val label: String)
+
+private val TABS = listOf(
+    TabItem("plan", "训练"),
+    TabItem("records", "记录"),
+    TabItem("assess", "我的"),
+    TabItem("settings", "设置"),
+)
 
 @Composable
 fun KneeRecordApp() {
     val navController = rememberNavController()
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route
+    val tabRoutes = TABS.map { it.route }
 
     Scaffold(
         bottomBar = {
-            // 录入页不需要底部导航，避免误触丢失已填内容
-            if (currentRoute != ROUTE_ENTRY) {
-                BottomTabs(navController = navController, currentRoute = currentRoute)
+            val backStackEntry by navController.currentBackStackEntryAsState()
+            val destination = backStackEntry?.destination
+            val showBar = destination?.hierarchy?.any { it.route in tabRoutes } ?: false
+            if (showBar) {
+                NavigationBar {
+                    TABS.forEach { tab ->
+                        NavigationBarItem(
+                            selected = destination?.hierarchy?.any { it.route == tab.route } == true,
+                            onClick = {
+                                navController.navigate(tab.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = {},
+                            label = { Text(tab.label) },
+                        )
+                    }
+                }
             }
         },
     ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = ROUTE_RECORDS,
-            modifier = Modifier.padding(padding),
-        ) {
-            composable(ROUTE_RECORDS) {
-                RecordsScreen(onAdd = { navController.navigate(ROUTE_ENTRY) })
+        Box(modifier = Modifier.padding(padding)) {
+            NavHost(navController = navController, startDestination = "plan") {
+                composable("plan") {
+                    PlanScreen(
+                        onStart = { navController.navigate("workout") },
+                        onGoAssess = { navController.navigate("assess") },
+                    )
+                }
+                composable("workout") {
+                    WorkoutScreen(onFinish = { navController.popBackStack() })
+                }
+                composable("records") {
+                    RecordsScreen(onAdd = { navController.navigate("entry") })
+                }
+                composable("entry") {
+                    EntryScreen(onSaved = { navController.popBackStack() })
+                }
+                composable("assess") { AssessScreen() }
+                composable("settings") { SettingsScreen() }
             }
-            composable(ROUTE_ENTRY) {
-                EntryScreen(onSaved = { navController.popBackStack() })
-            }
-            composable(ROUTE_PROFILE) { ProfileScreen() }
-            composable(ROUTE_SETTINGS) { SettingsScreen() }
         }
-    }
-}
-
-@Composable
-private fun BottomTabs(navController: NavHostController, currentRoute: String?) {
-    NavigationBar {
-        NavigationBarItem(
-            selected = currentRoute == ROUTE_RECORDS,
-            onClick = { navController.openTab(ROUTE_RECORDS) },
-            icon = {},
-            label = { Text("我的记录", fontSize = 12.sp) },
-        )
-        NavigationBarItem(
-            selected = currentRoute == ROUTE_PROFILE,
-            onClick = { navController.openTab(ROUTE_PROFILE) },
-            icon = {},
-            label = { Text("我的情况", fontSize = 12.sp) },
-        )
-        NavigationBarItem(
-            selected = currentRoute == ROUTE_SETTINGS,
-            onClick = { navController.openTab(ROUTE_SETTINGS) },
-            icon = {},
-            label = { Text("设置", fontSize = 12.sp) },
-        )
-    }
-}
-
-private fun NavHostController.openTab(route: String) {
-    navigate(route) {
-        popUpTo(graph.findStartDestination().id) { saveState = true }
-        launchSingleTop = true
-        restoreState = true
     }
 }

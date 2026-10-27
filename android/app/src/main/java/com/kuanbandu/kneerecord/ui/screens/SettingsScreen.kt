@@ -44,13 +44,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** 使用须知原文（本应用不提供任何锻炼建议，此处仅为提示性声明） */
-private val NOTICE_TEXT = "我已知晓运动中如有不适立即停止"
+/** 免责声明原文 */
+private val DISCLAIMER_TEXT = "我已知晓训练中如有不适立即停止"
 
-private val NOTICE_DETAIL = listOf(
-    "本应用仅用于个人锻炼记录，不提供任何动作推荐或锻炼建议。",
-    "本应用不替代专业人员的判断。",
-    "身体持续不适时应停止锻炼，是否寻求专业帮助由你自己决定。",
+private val DISCLAIMER_DETAIL = listOf(
+    "本应用提供的训练方案为通用参考，不替代执业医师或康复治疗师的评估与处方。",
+    "本应用不构成医疗诊断、治疗方案或医嘱。",
+    "训练中疼痛加重、肿胀明显或出现关节卡锁，应及时就医。",
 )
 
 @Composable
@@ -71,7 +71,7 @@ fun SettingsScreen() {
     ) { granted ->
         if (granted) {
             ReminderScheduler.schedule(context, time)
-            Toast.makeText(context, "已开启，每天 $time 会提醒你记录", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "已开启，每天 $time 会提醒你训练", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "未授予通知权限，提醒不会弹出", Toast.LENGTH_SHORT).show()
         }
@@ -129,7 +129,7 @@ fun SettingsScreen() {
             pendingImport = null
             return
         }
-        ReminderScheduler.sync(context) // 备份里的提醒设置也一并恢复了
+        ReminderScheduler.sync(context)
         val restored = LocalStore.getSettings()
         enabled = restored.reminderEnabled
         time = restored.reminderTime
@@ -147,7 +147,10 @@ fun SettingsScreen() {
         Spacer(Modifier.height(12.dp))
 
         // 每日提醒
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+        ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("每日提醒", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
 
@@ -158,7 +161,7 @@ fun SettingsScreen() {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("开启记录提醒", fontSize = 16.sp)
+                        Text("开启训练提醒", fontSize = 16.sp)
                         Text("到点后手机会收到通知", fontSize = 12.sp, color = Color(0xFF6B7280))
                     }
                     Switch(
@@ -180,7 +183,7 @@ fun SettingsScreen() {
                                 permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             } else {
                                 ReminderScheduler.schedule(context, time)
-                                Toast.makeText(context, "已开启，每天 $time 会提醒你记录", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "已开启，每天 $time 会提醒你训练", Toast.LENGTH_SHORT).show()
                             }
                         },
                     )
@@ -220,17 +223,20 @@ fun SettingsScreen() {
 
         Spacer(Modifier.height(12.dp))
 
-        // 使用须知
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        // 免责声明
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+        ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("使用须知", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text("免责声明", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    NOTICE_TEXT,
+                    DISCLAIMER_TEXT,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 8.dp),
                 )
-                NOTICE_DETAIL.forEach { line ->
+                DISCLAIMER_DETAIL.forEach { line ->
                     Text(
                         "· $line",
                         fontSize = 13.sp,
@@ -244,7 +250,10 @@ fun SettingsScreen() {
         Spacer(Modifier.height(12.dp))
 
         // 我的数据
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+        ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("我的数据", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
 
@@ -254,7 +263,7 @@ fun SettingsScreen() {
                         .padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("已保存锻炼记录", fontSize = 16.sp, modifier = Modifier.weight(1f))
+                    Text("已保存训练记录", fontSize = 16.sp, modifier = Modifier.weight(1f))
                     Text("$recordCount 条", fontSize = 16.sp, color = Color(0xFF6B7280))
                 }
 
@@ -278,10 +287,17 @@ fun SettingsScreen() {
         Spacer(Modifier.height(12.dp))
 
         // 备份与恢复
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+        ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("备份与恢复", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                Text("数据只存在本机，换手机或重装前先导出", fontSize = 12.sp, color = Color(0xFF6B7280))
+                Text(
+                    "数据只存在本机，换手机或重装前先导出",
+                    fontSize = 12.sp,
+                    color = Color(0xFF6B7280),
+                )
 
                 Row(
                     modifier = Modifier
@@ -294,7 +310,7 @@ fun SettingsScreen() {
                         Text("完整备份，可再导入回来", fontSize = 12.sp, color = Color(0xFF6B7280))
                     }
                     TextButton(onClick = {
-                        exportJsonLauncher.launch("knee-record-${fileStamp()}.json")
+                        exportJsonLauncher.launch("knee-rehab-${fileStamp()}.json")
                     }) { Text("导出") }
                 }
 
@@ -306,10 +322,10 @@ fun SettingsScreen() {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("导出表格（CSV）", fontSize = 16.sp)
-                        Text("一条记录一行，Excel 可打开", fontSize = 12.sp, color = Color(0xFF6B7280))
+                        Text("一次训练一行，Excel 可打开", fontSize = 12.sp, color = Color(0xFF6B7280))
                     }
                     TextButton(onClick = {
-                        exportCsvLauncher.launch("knee-record-${fileStamp()}.csv")
+                        exportCsvLauncher.launch("knee-rehab-${fileStamp()}.csv")
                     }) { Text("导出") }
                 }
 
@@ -332,7 +348,7 @@ fun SettingsScreen() {
 
         Spacer(Modifier.height(20.dp))
         Text(
-            "膝盖锻炼记录 · 本地数据版\n只负责记录与展示，不提供任何动作推荐或锻炼建议。",
+            "膝盖康复训练 · 本地数据版\n本应用不构成医疗建议，训练方案请与主治医生或康复治疗师确认。",
             fontSize = 13.sp,
             color = Color(0xFF6B7280),
             modifier = Modifier.padding(horizontal = 8.dp),
@@ -344,7 +360,7 @@ fun SettingsScreen() {
         AlertDialog(
             onDismissRequest = { showClear = false },
             title = { Text("清除全部数据") },
-            text = { Text("将删除全部锻炼记录与个人资料，且无法恢复。") },
+            text = { Text("将删除全部训练记录与个人资料，且无法恢复。") },
             confirmButton = {
                 TextButton(onClick = {
                     LocalStore.clearAll()
