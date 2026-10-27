@@ -238,3 +238,6 @@ private val FALLBACK = listOf(
 
 /** 取某个动作的示范动画；没有定义就给一个站立待机的画面 */
 fun framesFor(exerciseId: String): List<AnimFrame> = POSES[exerciseId] ?: FALLBACK
+
+/** 哪些动作还没配示范动画，供启动自检用 */
+fun missingAnimations(ids: List<String>): List<String> = ids.filter { !POSES.containsKey(it) }
