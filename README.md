@@ -1,107 +1,85 @@
-# 膝盖锻炼记录（微信小程序）
+# 膝盖康复训练（Android）
 
-只做**记录与展示**的膝盖锻炼日志：用户自己录入动作、身体感受评分、时长，小程序保存并画趋势图。
-**不提供动作推荐、不提供锻炼指导、不做任何自动判断。**
+按「伤情阶段 + 疼痛评分 + ROM 活动度」自动生成本次康复训练清单，带跟练计时器与疼痛趋势记录。数据全部存在手机本地，无后端、无上传。
 
-## 运行
+## 安装
 
-仓库里是同一套产品的两个端，功能一致：
-
-| 端 | 目录 | 怎么跑 |
-|---|---|---|
-| 微信小程序 | `miniprogram/` | 微信开发者工具 → 导入项目 → 目录选仓库根目录（`project.config.json` 已指定 `miniprogramRoot: miniprogram/`），AppID 选「测试号」即可预览。无 npm 依赖、无需构建 |
-| Android | `android/` | Android Studio（Koala 2024.1.1 或更新）→ Open → 选 `android` 目录 → Sync → Run。JDK 17，最低 Android 8.0（API 26）。不想装 Studio 就直接从 [Releases](../../releases) 下载 APK |
-
-小程序端开发自检：
-
-```bash
-npm run smoke   # 用 wx 桩在 Node 里跑通页面流程（不进包体）
-```
-
-> Android 工程没有提交 `gradle-wrapper.jar`（二进制）。首次 Sync 若提示 wrapper 缺失，在 `android/` 目录执行 `gradle wrapper` 生成，或让 Android Studio 自动修复。
-
-## 页面
-
-| 页面 | 类型 | 说明 |
-|---|---|---|
-| 我的记录 `pages/records` | tab（首页） | 锻炼记录列表 + 身体感受变化趋势图 + 「＋ 记一次」入口，支持删除记录 |
-| 记一次 `pages/entry` | `navigateTo` | 手动录入：动作名称（可加多行，带可选组数）、身体感受评分 0-10、时长（分钟）、备注 |
-| 我的情况 `pages/assess` | tab | 个人资料存档：年龄、当前阶段、膝盖弯曲角度自评。**仅保存，不参与任何功能** |
-| 设置 `pages/settings` | tab | 提醒开关与时间、使用须知（静态展示）、清除数据 |
-
-## 术语约定
-
-产品内统一用词，新增文案请沿用：
-
-| 用 | 不用 |
+| 方式 | 说明 |
 |---|---|
-| 锻炼记录 | 康复训练 |
-| 我的记录 | 康复计划 |
-| 身体感受评分 | 疼痛评分 |
-| 起步期 / 进阶期 / 强化期 / 日常保养 | 术后早期 / 术后中期 / 术后后期 / 预防强化 |
-| 膝盖弯曲角度（自评） | 膝盖活动度自评 |
-| 使用须知 | 免责声明 |
+| 直接装 APK | 从 [Releases](../../releases) 下载，传到手机安装（Android 8.0+，需允许「未知来源」） |
+| 自己编译 | Android Studio → Open → 选 `android` 目录 → Sync → Run。JDK 17，minSdk 26 |
 
-## 已移除的内容
+每次 push 到 `main`，GitHub Actions 会自动 `assembleDebug`，产物在 Actions 页面。
 
-上一版的推荐型逻辑已全部删除：
+## 四个页签
 
-- `pages/plan`（自动生成的清单）与 `pages/workout`（跟练计时器）两个页面
-- 开场前的强制勾选与 12 小时失效机制
-- 身体感受上报的自动处置（停止/替代动作/就医提示）
-- 趋势图上的警戒线与一切"建议/应该"类文案
-
-上一版遗留的规则引擎 `engine/`、演示脚本 `demo.js` 与引擎测试 `test/` 也已删除，仓库内不再有任何推荐逻辑。
-
-## 本地数据
-
-`miniprogram/utils/store.js` 是唯一读写入口，页面禁止直接调用 `wx.setStorageSync`。
-
-| key | 内容 |
+| 页签 | 内容 |
 |---|---|
-| `knee:records` | 锻炼记录数组，最多 200 条 |
-| `knee:assessment` | 个人资料 |
-| `knee:settings` | 提醒开关与时间 |
+| **训练** | 推荐条件卡片（阶段、允许等级、禁止类别、被拦下的动作数）+ 热身/主训练/放松分组清单；动作卡片点开是完整动作详情（剂量、作用、膝盖口令、安全要点、常见错误），可「单独跟练」。勾选训练前须知后开始今日训练 |
+| **记录** | 训练次数/累计时长/平均训练前疼痛；疼痛趋势双线图（训练前 + 训练中峰值，红色虚线为 4 分警戒线）；记录列表与删除；支持手动补记 |
+| **我的** | 评估页：年龄、伤情阶段、疼痛评分、ROM 活动度（屈膝角度）、能否完全伸直 |
+| **设置** | 每日本地通知提醒、免责声明、清除数据、备份导出（JSON/CSV）与导入恢复 |
 
-记录结构：
+## 规则全部在引擎里，界面只是表现层
 
-```js
-{
-  id, date, timestamp,
-  feelingScore,     // 0-10 身体感受
-  durationMin,      // 分钟
-  note,
-  exercises: [{ name, sets }]
-}
-```
+`android/.../engine/KneeRehabRules.kt` 是唯一裁决点：
 
-个人资料结构：`{ age, stage, bendAngle, straightenOk, updatedAt }`
+- **阶段决定等级上限**：术后早期 L1 / 术后中期 L2 / 术后后期 L3 / 未手术 L4
+- **疼痛决定禁练类别**：疼痛 ≥ 4 禁止深蹲、弓步、跳跃，且等级上限压到 L2；疼痛 ≥ 7 追加禁止平衡类，上限压到 L1
+- **ROM 决定能不能弯**：动作自带 `needsFlexion`（全蹲 110°、后撤步弓步 100° 等），活动度不够直接拦下，并单独计数
+- **清单生成**：先按类别去重再按等级补齐，每个环节取固定个数（热身 2 / 主训练 4 / 放松 2），结果按等级由易到难排序
+- **开练必须勾选**：`previewSession()` 只算清单不要勾选；`startSession()` / `startSingleExerciseSession()` 未勾选或勾选超过 12 小时会抛 `ConsentRequiredError`；单独跟练某个被禁动作会抛 `ExerciseBlockedError` 并给出原因
+- **疼痛上报处置** `handlePainReport()`：≥ 4 停止当前动作并推荐低强度替代（踝泵）；≥ 7 立即停止并提示寻求专业帮助
+- **启动自检** `ExerciseLibrary.validate()`：动作库里任何一个动作缺名称、剂量、膝盖口令、安全要点（少于 2 条）或常见错误，App 直接拒绝启动
+
+## 动作库
+
+21 个动作，覆盖三个环节。每个动作含：名称、等级（L1-L4）、类别、剂量（保持计时 / 正计时 / 次数三种模式 + 组数 + 组间休息）、膝盖口令、作用、安全要点、常见错误、所需屈膝角度。
+
+热身 4 个（踝泵、脚跟滑动、股四头肌绷劲、髌骨活动），主训练 14 个（直腿抬高、终末伸膝、臀桥、蚌式开合、侧卧直腿抬高、单腿站立平衡、靠墙静蹲 60°、自重半蹲、台阶踏上、后撤步弓步、侧向轻跳、蹲跳、全蹲等），放松 3 个（腘绳肌/股四头肌/小腿拉伸）。
+
+## 跟练计时器
+
+按动作的剂量模式自动切换三种形式：
+
+- **保持计时**：倒计时到 0 自动进入下一次/下一组
+- **正计时**：到时自动完成本组
+- **次数**：手动点「完成本组」
+
+组间倒计时可跳过；一个动作做完全部组数后弹「疼痛评分 + 自觉疲劳（RPE）」双滑块；全部完成自动落库成一条训练记录（训练前疼痛、峰值疼痛、RPE、时长、完成的动作与组数）。
+
+## 数据与备份
+
+存储在应用私有目录：`knee_records.json` / `knee_assessment.json` / `knee_settings.json`，记录上限 200 条。
+
+设置页可导出 JSON 完整备份（记录 + 个人资料 + 提醒设置，可再导入）或 CSV 表格（一次训练一行，带 BOM，Excel 打开中文不乱码）。导入时可选「合并」（按记录 id 去重后补充）或「替换」（清空后导入）。
 
 ## 目录
 
 ```
-miniprogram/
-├─ app.js / app.json / app.wxss
-├─ utils/store.js
-└─ pages/records|entry|assess|settings
-android/
-└─ app/src/main/java/com/kuanbandu/kneerecord/
-   ├─ MainActivity.kt
-   ├─ model/Models.kt          数据类与阶段选项
-   ├─ data/LocalStore.kt       存储层（三个 JSON 文件）
-   ├─ reminder/                每日提醒（AlarmManager + 本地通知）
-   └─ ui/                      四个界面 + 趋势图
-tools/smoke.js        小程序页面流程冒烟（wx 桩，不进包体）
+android/app/src/main/java/com/kuanbandu/kneerecord/
+├─ MainActivity.kt              启动：存储初始化 + 动作库自检
+├─ model/                       数据模型：Stage / Assessment / Exercise / Dosage / Record
+├─ engine/
+│  ├─ ExerciseLibrary.kt        21 个动作 + 启动自检
+│  ├─ KneeRehabRules.kt         门禁、清单生成、疼痛上报处置
+│  └─ SessionHolder.kt          本次会话的临时持有者
+├─ data/LocalStore.kt           存储层 + 备份导出导入
+├─ reminder/                    AlarmManager + 本地通知
+└─ ui/
+   ├─ KneeRecordApp.kt          4 个页签 + 路由
+   ├─ components/PainChart.kt   疼痛趋势双线图（Canvas 手绘）
+   └─ screens/                  训练 / 跟练 / 记录 / 补记 / 我的 / 设置
 ```
 
-## Android 版
+除 AndroidX（Compose Material3、Navigation、Activity）外无第三方依赖。
 
-- Kotlin + Jetpack Compose + Material3，除 AndroidX 外**无第三方依赖**，趋势图用 Compose Canvas 手绘。
-- 数据与小程序端结构完全一致，存在应用私有目录：`knee_records.json` / `knee_assessment.json` / `knee_settings.json`。
-- **每日提醒是真提醒**：本机 AlarmManager + 本地通知，不需要服务端（小程序端做不到，只能"打开时提示"）。Android 13+ 首次开启会请求通知权限；重启手机后需先打开一次应用才会重新排期。
-- **备份与恢复**：设置页可导出 JSON 完整备份（记录 + 个人资料 + 设置）或 CSV 表格（Excel 可直接打开，带 BOM）；导入时选择「合并」（按 id 去重补充）或「替换」（清空后导入）。文件通过系统文件选择器存到手机/网盘。
-- **云端编译**：每次 push 到 `main`，GitHub Actions（`.github/workflows/android.yml`）自动 `assembleDebug`，产物在 Actions 页面；打过 tag 的版本 APK 挂在 Releases 上。
+## 免责声明
+
+本应用提供的训练方案为通用参考，不替代执业医师或康复治疗师的评估与处方；不构成医疗诊断、治疗方案或医嘱。训练中疼痛加重、肿胀明显或出现关节卡锁，应及时就医。
 
 ## 已知限制
 
-- **小程序端提醒不是后台推送**：无服务端无法定时推送，只能是「打开小程序时提示」。Android 端是真实的每日本地通知。
+- 无示范图片/视频，动作要点以文字与膝盖口令呈现。
+- 每日提醒是本机闹钟通知，不需要联网，但重启手机后需先打开一次应用才会重新排期。
+- 未做 ROM 之外的进阶干预规则（如跨次训练的自适应升降级）。
