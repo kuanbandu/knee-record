@@ -8,7 +8,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
+import com.kuanbandu.kneerecord.data.LocalStore
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -66,21 +68,37 @@ fun KneeRecordApp() {
         Box(modifier = Modifier.padding(padding)) {
             NavHost(navController = navController, startDestination = "plan") {
                 composable("plan") {
-                    PlanScreen(
-                        onStart = { navController.navigate("workout") },
-                        onGoAssess = { navController.navigate("assess") },
-                    )
+                    // 评估或记录一变就让页面重建，否则切页签会拿到旧的缓存，
+                    // 表现为「刚填完情况仍然提示去填写，重启才正常」
+                    key(LocalStore.assessmentVersion.value, LocalStore.recordsVersion.value) {
+                        PlanScreen(
+                            onStart = { navController.navigate("workout") },
+                            onGoAssess = { navController.navigate("assess") },
+                        )
+                    }
                 }
                 composable("workout") {
                     WorkoutScreen(onFinish = { navController.popBackStack() })
                 }
                 composable("records") {
-                    RecordsScreen(onAdd = { navController.navigate("entry") })
+                    key(LocalStore.recordsVersion.value) {
+                        RecordsScreen(onAdd = { navController.navigate("entry") })
+                    }
                 }
                 composable("entry") {
                     EntryScreen(onSaved = { navController.popBackStack() })
                 }
-                composable("assess") { AssessScreen() }
+                composable("assess") {
+                    AssessScreen(
+                        onSaved = {
+                            // 保存后直接回训练页，省得自己再点一次
+                            navController.navigate("plan") {
+                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        },
+                    )
+                }
                 composable("settings") { SettingsScreen() }
             }
         }

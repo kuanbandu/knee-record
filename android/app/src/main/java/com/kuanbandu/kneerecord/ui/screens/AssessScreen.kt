@@ -39,7 +39,7 @@ import com.kuanbandu.kneerecord.model.STAGE_OPTIONS
 import kotlin.math.roundToInt
 
 @Composable
-fun AssessScreen() {
+fun AssessScreen(onSaved: () -> Unit = {}) {
     val context = LocalContext.current
     val saved = remember { LocalStore.getAssessment() }
 
@@ -237,6 +237,7 @@ fun AssessScreen() {
                 )
                 savedAt = System.currentTimeMillis()
                 Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
+                onSaved()
             },
             modifier = Modifier
                 .fillMaxWidth()

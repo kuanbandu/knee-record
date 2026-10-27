@@ -15,7 +15,7 @@ private val SIDE_FREE = Pose(
     stance = Stance.SIDE_LYING,
     legMode = LegMode.FREE,
     // 侧卧时髋离床面要留出骨盆的厚度，不然屈膝的腿会陷进地面
-    hipY = 0.76f,
+    hipY = 0.78f,
 )
 
 private val POSES: Map<String, List<AnimFrame>> = mapOf(
@@ -86,27 +86,27 @@ private val POSES: Map<String, List<AnimFrame>> = mapOf(
         ),
     ),
 
-    // 蚌式：侧卧、双腿屈膝、双脚并拢，上面那条腿的膝盖像蚌壳一样张开
-    // hip2/knee2 是贴床的下腿（微屈），hip/knee 是上面那条腿
+    // 蚌式开合：侧卧、双臂前伸、双脚并拢，上面那条腿的膝盖像蚌壳一样向上张开
+    // hip2/knee2 是贴床的下腿（微屈），hip/knee 是上面那条腿（屈膝约 90°）
     "clam-shell" to listOf(
         AnimFrame(
-            SIDE_FREE.copy(hip = 2f, knee = 72f, hip2 = -2f, knee2 = 60f),
-            moveMs = 750, holdMs = 350,
+            SIDE_FREE.copy(hip = 2f, knee = 70f, hip2 = -8f, knee2 = 30f, arm = 10f),
+            moveMs = 800, holdMs = 250,
         ),
         AnimFrame(
-            SIDE_FREE.copy(hip = 28f, knee = 108f, hip2 = -2f, knee2 = 60f),
-            moveMs = 750, holdMs = 550,
+            SIDE_FREE.copy(hip = 34f, knee = 100f, hip2 = -8f, knee2 = 30f, arm = 10f),
+            moveMs = 800, holdMs = 900,
         ),
     ),
 
     "side-lying-leg-raise" to listOf(
         AnimFrame(
-            SIDE_FREE.copy(hip = -20f, knee = 5f, hip2 = -20f, knee2 = 12f),
+            SIDE_FREE.copy(hip = -20f, knee = 0f, hip2 = -8f, knee2 = 30f),
             moveMs = 900, holdMs = 300,
         ),
         AnimFrame(
-            SIDE_FREE.copy(hip = 25f, knee = 5f, hip2 = -20f, knee2 = 12f),
-            moveMs = 900, holdMs = 600,
+            SIDE_FREE.copy(hip = 25f, knee = 0f, hip2 = -8f, knee2 = 30f),
+            moveMs = 900, holdMs = 700,
         ),
     ),
 
