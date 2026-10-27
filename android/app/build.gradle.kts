@@ -26,6 +26,15 @@ android {
         }
     }
 
+    // APK 文件名带上版本号，拿到安装包就知道是哪个版本
+    applicationVariants.all {
+        val variant = this
+        outputs.all {
+            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl)
+                .outputFileName = "knee-rehab-v${variant.versionName}-${variant.name}.apk"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
