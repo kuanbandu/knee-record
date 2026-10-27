@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.mutableStateOf
 import com.kuanbandu.kneerecord.model.Assessment
 import com.kuanbandu.kneerecord.model.ExerciseEntry
+import com.kuanbandu.kneerecord.model.MetronomeSound
 import com.kuanbandu.kneerecord.model.Record
 import com.kuanbandu.kneerecord.model.Settings
 import org.json.JSONArray
@@ -23,6 +24,10 @@ object LocalStore {
     private const val F_ASSESSMENT = "knee_assessment.json"
     private const val F_SETTINGS = "knee_settings.json"
     private const val MAX_RECORDS = 200
+
+    /** 节拍快慢的可选范围 */
+    const val METRONOME_BPM_MIN = 40
+    const val METRONOME_BPM_MAX = 180
 
     /** 记录版本号，界面用它触发刷新 */
     val recordsVersion = mutableStateOf(0)
@@ -157,6 +162,15 @@ object LocalStore {
             reminderEnabled = o.optBoolean("reminderEnabled", false),
             reminderTime = o.optString("reminderTime", "").takeIf { it.isNotBlank() } ?: "19:00",
             consentAt = o.optLong("consentAt"),
+            metronomeEnabled = o.optBoolean("metronomeEnabled", true),
+            metronomeBpm = o.optInt("metronomeBpm", 60).coerceIn(METRONOME_BPM_MIN, METRONOME_BPM_MAX),
+            metronomeSound = o.optString("metronomeSound", "")
+                .takeIf { it.isNotBlank() } ?: MetronomeSound.WOOD.key,
+            metronomeVolume = o.optInt("metronomeVolume", 70).coerceIn(0, 100),
+            metronomeAccent = o.optInt("metronomeAccent", 4).coerceIn(0, 8),
+            countAloud = o.optBoolean("countAloud", false),
+            restCue = o.optBoolean("restCue", true),
+            customSoundUri = o.optString("customSoundUri", ""),
         )
     }
 
@@ -164,17 +178,41 @@ object LocalStore {
         reminderEnabled: Boolean? = null,
         reminderTime: String? = null,
         consentAt: Long? = null,
+        metronomeEnabled: Boolean? = null,
+        metronomeBpm: Int? = null,
+        metronomeSound: String? = null,
+        metronomeVolume: Int? = null,
+        metronomeAccent: Int? = null,
+        countAloud: Boolean? = null,
+        restCue: Boolean? = null,
+        customSoundUri: String? = null,
     ): Settings {
         val current = getSettings()
         val next = Settings(
             reminderEnabled = reminderEnabled ?: current.reminderEnabled,
             reminderTime = reminderTime ?: current.reminderTime,
             consentAt = consentAt ?: current.consentAt,
+            metronomeEnabled = metronomeEnabled ?: current.metronomeEnabled,
+            metronomeBpm = metronomeBpm ?: current.metronomeBpm,
+            metronomeSound = metronomeSound ?: current.metronomeSound,
+            metronomeVolume = metronomeVolume ?: current.metronomeVolume,
+            metronomeAccent = metronomeAccent ?: current.metronomeAccent,
+            countAloud = countAloud ?: current.countAloud,
+            restCue = restCue ?: current.restCue,
+            customSoundUri = customSoundUri ?: current.customSoundUri,
         )
         val o = JSONObject()
         o.put("reminderEnabled", next.reminderEnabled)
         o.put("reminderTime", next.reminderTime)
         o.put("consentAt", next.consentAt)
+        o.put("metronomeEnabled", next.metronomeEnabled)
+        o.put("metronomeBpm", next.metronomeBpm)
+        o.put("metronomeSound", next.metronomeSound)
+        o.put("metronomeVolume", next.metronomeVolume)
+        o.put("metronomeAccent", next.metronomeAccent)
+        o.put("countAloud", next.countAloud)
+        o.put("restCue", next.restCue)
+        o.put("customSoundUri", next.customSoundUri)
         writeText(F_SETTINGS, o.toString())
         return next
     }
@@ -219,6 +257,14 @@ object LocalStore {
         val so = JSONObject()
         so.put("reminderEnabled", s.reminderEnabled)
         so.put("reminderTime", s.reminderTime)
+        so.put("metronomeEnabled", s.metronomeEnabled)
+        so.put("metronomeBpm", s.metronomeBpm)
+        so.put("metronomeSound", s.metronomeSound)
+        so.put("metronomeVolume", s.metronomeVolume)
+        so.put("metronomeAccent", s.metronomeAccent)
+        so.put("countAloud", s.countAloud)
+        so.put("restCue", s.restCue)
+        so.put("customSoundUri", s.customSoundUri)
         root.put("settings", so)
         return root.toString(2)
     }
@@ -325,6 +371,14 @@ object LocalStore {
             updateSettings(
                 reminderEnabled = if (so.has("reminderEnabled")) so.optBoolean("reminderEnabled") else null,
                 reminderTime = so.optString("reminderTime", "").takeIf { it.isNotBlank() },
+                metronomeEnabled = if (so.has("metronomeEnabled")) so.optBoolean("metronomeEnabled") else null,
+                metronomeBpm = if (so.has("metronomeBpm")) so.optInt("metronomeBpm") else null,
+                metronomeSound = so.optString("metronomeSound", "").takeIf { it.isNotBlank() },
+                metronomeVolume = if (so.has("metronomeVolume")) so.optInt("metronomeVolume") else null,
+                metronomeAccent = if (so.has("metronomeAccent")) so.optInt("metronomeAccent") else null,
+                countAloud = if (so.has("countAloud")) so.optBoolean("countAloud") else null,
+                restCue = if (so.has("restCue")) so.optBoolean("restCue") else null,
+                customSoundUri = so.optString("customSoundUri", ""),
             )
         }
 

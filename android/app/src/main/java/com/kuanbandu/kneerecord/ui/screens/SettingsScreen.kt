@@ -3,6 +3,7 @@ package com.kuanbandu.kneerecord.ui.screens
 import android.Manifest
 import android.app.TimePickerDialog
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -22,11 +23,16 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,11 +44,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.kuanbandu.kneerecord.audio.Metronome
 import com.kuanbandu.kneerecord.data.LocalStore
+import com.kuanbandu.kneerecord.model.MetronomeSound
 import com.kuanbandu.kneerecord.reminder.ReminderScheduler
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** 免责声明原文 */
 private val DISCLAIMER_TEXT = "我已知晓训练中如有不适立即停止"
@@ -65,6 +74,43 @@ fun SettingsScreen() {
     var showClear by remember { mutableStateOf(false) }
     var pendingImport by remember { mutableStateOf<String?>(null) }
     var pendingCount by remember { mutableStateOf(0) }
+
+    // 节拍与提示音
+    var metroEnabled by remember { mutableStateOf(settings.metronomeEnabled) }
+    var bpm by remember { mutableFloatStateOf(settings.metronomeBpm.toFloat()) }
+    var soundKey by remember { mutableStateOf(settings.metronomeSound) }
+    var vol by remember { mutableFloatStateOf(settings.metronomeVolume.toFloat()) }
+    var accent by remember { mutableIntStateOf(settings.metronomeAccent) }
+    var countAloud by remember { mutableStateOf(settings.countAloud) }
+    var restCueOn by remember { mutableStateOf(settings.restCue) }
+    var customUri by remember { mutableStateOf(settings.customSoundUri) }
+
+    val preview = remember { Metronome(context.applicationContext) }
+    DisposableEffect(Unit) {
+        onDispose { preview.release() }
+    }
+    LaunchedEffect(Unit) {
+        if (settings.customSoundUri.isNotBlank()) preview.setCustom(settings.customSoundUri)
+    }
+
+    val audioPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        val value = uri.toString()
+        customUri = value
+        soundKey = MetronomeSound.CUSTOM.key
+        LocalStore.updateSettings(customSoundUri = value)
+        LocalStore.updateSettings(metronomeSound = MetronomeSound.CUSTOM.key)
+        preview.setCustom(value)
+        Toast.makeText(context, "已选好，点「试听」听一下", Toast.LENGTH_SHORT).show()
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -217,6 +263,213 @@ fun SettingsScreen() {
                     }) {
                         Text("$time ›")
                     }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // 节拍与提示音
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("节拍与提示音", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "跟练时按拍响，节奏快慢和音色自己定",
+                    fontSize = 12.sp,
+                    color = Color(0xFF6B7280),
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("训练时打节拍", fontSize = 16.sp)
+                        Text("关掉后只剩画面，不出声", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    }
+                    Switch(
+                        checked = metroEnabled,
+                        onCheckedChange = {
+                            metroEnabled = it
+                            LocalStore.updateSettings(metronomeEnabled = it)
+                        },
+                    )
+                }
+
+                Text(
+                    "音色",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf(MetronomeSound.WOOD, MetronomeSound.TICK).forEach { s ->
+                        TextButton(onClick = {
+                            soundKey = s.key
+                            LocalStore.updateSettings(metronomeSound = s.key)
+                            preview.click(s, strong = true, vol / 100f)
+                        }) {
+                            Text(
+                                s.label,
+                                color = if (soundKey == s.key) Color(0xFF0A84FF) else Color(0xFF6B7280),
+                            )
+                        }
+                    }
+                }
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf(MetronomeSound.BELL, MetronomeSound.CUSTOM).forEach { s ->
+                        TextButton(onClick = {
+                            soundKey = s.key
+                            LocalStore.updateSettings(metronomeSound = s.key)
+                            preview.click(s, strong = true, vol / 100f)
+                        }) {
+                            Text(
+                                s.label,
+                                color = if (soundKey == s.key) Color(0xFF0A84FF) else Color(0xFF6B7280),
+                            )
+                        }
+                    }
+                }
+
+                if (soundKey == MetronomeSound.CUSTOM.key) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("自选音频", fontSize = 14.sp)
+                            Text(
+                                if (customUri.isBlank()) "还没选，从手机里挑一个" else "已选，可试听或清除",
+                                fontSize = 12.sp,
+                                color = Color(0xFF6B7280),
+                            )
+                        }
+                        TextButton(onClick = { audioPicker.launch(arrayOf("audio/*")) }) {
+                            Text("选择")
+                        }
+                        if (customUri.isNotBlank()) {
+                            TextButton(onClick = {
+                                preview.click(MetronomeSound.CUSTOM, strong = true, vol / 100f)
+                            }) { Text("试听") }
+                            TextButton(onClick = {
+                                customUri = ""
+                                soundKey = MetronomeSound.WOOD.key
+                                LocalStore.updateSettings(customSoundUri = "")
+                                LocalStore.updateSettings(metronomeSound = MetronomeSound.WOOD.key)
+                                preview.setCustom("")
+                            }) { Text("清除", color = Color(0xFFFF3B30)) }
+                        }
+                    }
+                }
+
+                Text(
+                    "快慢：每分钟 ${bpm.roundToInt()} 拍",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Slider(
+                    value = bpm,
+                    onValueChange = { bpm = it },
+                    valueRange = 40f..180f,
+                    steps = 27,
+                    onValueChangeFinished = {
+                        LocalStore.updateSettings(metronomeBpm = bpm.roundToInt())
+                    },
+                )
+
+                Text(
+                    "音量：${vol.roundToInt()}%",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                Slider(
+                    value = vol,
+                    onValueChange = { vol = it },
+                    valueRange = 0f..100f,
+                    steps = 20,
+                    onValueChangeFinished = {
+                        LocalStore.updateSettings(metronomeVolume = vol.roundToInt())
+                    },
+                )
+
+                Text(
+                    "重音",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf(0 to "不强调", 2 to "每 2 拍").forEach { (v, label) ->
+                        TextButton(onClick = {
+                            accent = v
+                            LocalStore.updateSettings(metronomeAccent = v)
+                        }) {
+                            Text(
+                                label,
+                                color = if (accent == v) Color(0xFF0A84FF) else Color(0xFF6B7280),
+                            )
+                        }
+                    }
+                }
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf(3 to "每 3 拍", 4 to "每 4 拍").forEach { (v, label) ->
+                        TextButton(onClick = {
+                            accent = v
+                            LocalStore.updateSettings(metronomeAccent = v)
+                        }) {
+                            Text(
+                                label,
+                                color = if (accent == v) Color(0xFF0A84FF) else Color(0xFF6B7280),
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("语音报数", fontSize = 16.sp)
+                        Text("计数类动作按拍念数", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    }
+                    Switch(
+                        checked = countAloud,
+                        onCheckedChange = {
+                            countAloud = it
+                            LocalStore.updateSettings(countAloud = it)
+                        },
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("休息倒计时提示", fontSize = 16.sp)
+                        Text("最后 3 秒滴一下，结束一声长音", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    }
+                    Switch(
+                        checked = restCueOn,
+                        onCheckedChange = {
+                            restCueOn = it
+                            LocalStore.updateSettings(restCue = it)
+                        },
+                    )
                 }
             }
         }

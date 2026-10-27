@@ -38,6 +38,8 @@ import com.kuanbandu.kneerecord.engine.KneeRehabRules
 import com.kuanbandu.kneerecord.engine.SessionHolder
 import com.kuanbandu.kneerecord.model.Exercise
 import com.kuanbandu.kneerecord.model.Stage
+import com.kuanbandu.kneerecord.ui.components.ExerciseAnimation
+import com.kuanbandu.kneerecord.ui.components.framesFor
 
 private const val CONSENT_TEXT = "我已知晓训练中如有不适立即停止"
 
@@ -266,6 +268,8 @@ fun PlanScreen(onStart: () -> Unit, onGoAssess: () -> Unit) {
             title = { Text(e.name) },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    ExerciseAnimation(frames = framesFor(e.id))
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         "${e.category.label} · L${e.level} · ${e.dosage.describe()}",
                         fontSize = 13.sp,

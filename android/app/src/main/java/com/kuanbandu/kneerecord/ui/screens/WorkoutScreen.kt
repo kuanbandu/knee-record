@@ -21,6 +21,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -28,6 +29,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.kuanbandu.kneerecord.audio.Cue
+import com.kuanbandu.kneerecord.audio.Metronome
+import com.kuanbandu.kneerecord.audio.Speech
+import com.kuanbandu.kneerecord.model.MetronomeSound
+import com.kuanbandu.kneerecord.ui.components.ExerciseAnimation
+import com.kuanbandu.kneerecord.ui.components.framesFor
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -77,6 +84,28 @@ fun WorkoutScreen(onFinish: () -> Unit) {
     val sets = exercise.dosage.sets.coerceAtLeast(1)
     val reps = exercise.dosage.reps.coerceAtLeast(1)
 
+    // 节拍与语音：跟着设置走，页面退出时释放
+    val settings = remember { LocalStore.getSettings() }
+    val volume = settings.metronomeVolume / 100f
+    val appContext = context.applicationContext
+    val metronome = remember { Metronome(appContext) }
+    val speech = remember { Speech(appContext) }
+    val sound = remember(settings.metronomeSound) { MetronomeSound.of(settings.metronomeSound) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            metronome.release()
+            speech.shutdown()
+        }
+    }
+
+    LaunchedEffect(settings.customSoundUri) {
+        metronome.setCustom(settings.customSoundUri)
+    }
+
+    var animPlaying by remember { mutableStateOf(true) }
+    var animSpeed by remember { mutableFloatStateOf(1f) }
+
     /** 本动作全部组数完成后的去向 */
     fun afterSet() {
         if (setIndex + 1 >= sets) {
@@ -113,9 +142,14 @@ fun WorkoutScreen(onFinish: () -> Unit) {
         while (remaining > 0) {
             delay(1000L)
             remaining--
+            // 休息最后 3 秒滴一下，不用盯着屏幕
+            if (settings.restCue && phase == Phase.REST && remaining in 1..3) {
+                metronome.cue(Cue.COUNTDOWN, volume)
+            }
         }
 
         if (phase == Phase.REST) {
+            if (settings.restCue) metronome.cue(Cue.FINISH, volume)
             setIndex++
             phase = Phase.RUNNING
         } else if (exercise.dosage.mode == DoseMode.HOLD) {
@@ -127,6 +161,23 @@ fun WorkoutScreen(onFinish: () -> Unit) {
             }
         } else {
             afterSet()
+        }
+    }
+
+    // 节拍：按设置的速度打拍；计数类动作还能语音报数
+    LaunchedEffect(index, setIndex, repIndex, phase, settings.metronomeEnabled, settings.metronomeBpm) {
+        if (!settings.metronomeEnabled) return@LaunchedEffect
+        if (phase != Phase.RUNNING && phase != Phase.REST) return@LaunchedEffect
+        val interval = (60_000L / settings.metronomeBpm).coerceAtLeast(200L)
+        var beat = 0
+        while (true) {
+            val accent = settings.metronomeAccent
+            metronome.click(sound, strong = accent > 0 && beat % accent == 0, volume)
+            if (settings.countAloud && phase == Phase.RUNNING && exercise.dosage.mode == DoseMode.REPS) {
+                speech.say((beat % reps + 1).toString())
+            }
+            beat++
+            delay(interval)
         }
     }
 
@@ -181,6 +232,43 @@ fun WorkoutScreen(onFinish: () -> Unit) {
             fontSize = 13.sp,
             color = Color(0xFF6B7280),
         )
+
+        Spacer(Modifier.height(12.dp))
+
+        // 动作示范动画
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                ExerciseAnimation(
+                    frames = framesFor(exercise.id),
+                    playing = animPlaying,
+                    speed = animSpeed,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { animPlaying = !animPlaying }) {
+                        Text(if (animPlaying) "暂停示范" else "播放示范")
+                    }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = {
+                        animSpeed = when (animSpeed) {
+                            1f -> 0.5f
+                            0.5f -> 1.5f
+                            else -> 1f
+                        }
+                    }) {
+                        Text(
+                            when (animSpeed) {
+                                0.5f -> "慢放 0.5×"
+                                1.5f -> "快放 1.5×"
+                                else -> "常速 1×"
+                            },
+                        )
+                    }
+                }
+            }
+        }
 
         Spacer(Modifier.height(12.dp))
 

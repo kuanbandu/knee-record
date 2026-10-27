@@ -41,8 +41,32 @@ data class Record(
     val exercises: List<ExerciseEntry> = emptyList(),
 )
 
+/** 节拍音音色 */
+enum class MetronomeSound(val key: String, val label: String) {
+    WOOD("WOOD", "木鱼"),
+    TICK("TICK", "滴答"),
+    BELL("BELL", "铃"),
+    CUSTOM("CUSTOM", "自选音频"),
+    ;
+
+    companion object {
+        fun of(key: String): MetronomeSound =
+            entries.firstOrNull { it.key == key } ?: WOOD
+    }
+}
+
 data class Settings(
     val reminderEnabled: Boolean = false,
     val reminderTime: String = "19:00",
     val consentAt: Long = 0L,
+    // 节拍与提示音
+    val metronomeEnabled: Boolean = true,
+    val metronomeBpm: Int = 60,
+    val metronomeSound: String = MetronomeSound.WOOD.key,
+    val metronomeVolume: Int = 70,
+    /** 每几拍一个重音，0 表示不强调 */
+    val metronomeAccent: Int = 4,
+    val countAloud: Boolean = false,
+    val restCue: Boolean = true,
+    val customSoundUri: String = "",
 )
