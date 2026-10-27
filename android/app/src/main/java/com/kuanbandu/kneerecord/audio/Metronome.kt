@@ -49,9 +49,9 @@ class Metronome(private val context: Context) {
                 customId = sampleId
                 customReady = true
             }
+            runCatching { fd.close() }
         }
-        customId = p.load(fd, 0, -1, 1)
-        runCatching { fd.close() }
+        customId = p.load(fd.fileDescriptor, 0, -1, 1)
         pool = p
         return true
     }

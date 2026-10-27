@@ -134,7 +134,7 @@ private fun build(pose: Pose): Body {
     val armBase = if (pose.stance == Stance.STANDING) -pose.trunk else 90f
     val hand = shoulder + dir(armBase + pose.arm) * L_ARM
 
-    val leg1 = solveLeg(pose, hip, front = true)
+    val leg1 = solveLeg(pose, hip)
     val leg2 = if (pose.foot2X != null || pose.stance == Stance.SIDE_LYING) {
         solveLeg2(pose, hip)
     } else {
